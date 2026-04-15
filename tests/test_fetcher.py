@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 
 from skills_verified.repo.fetcher import fetch_repo
 

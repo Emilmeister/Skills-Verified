@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from skills_verified.core.models import (
     Category, CategoryScore, Finding, Grade, Report, Severity,

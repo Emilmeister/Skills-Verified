@@ -1,7 +1,6 @@
-from pathlib import Path
 
 from skills_verified.analyzers.permissions_analyzer import PermissionsAnalyzer
-from skills_verified.core.models import Category, Severity
+from skills_verified.core.models import Category
 
 
 def test_is_available():
@@ -44,6 +43,32 @@ def test_no_findings_on_clean_file(tmp_path):
     analyzer = PermissionsAnalyzer()
     findings = analyzer.analyze(tmp_path)
     assert findings == []
+
+
+def test_detects_insecure_http_url(tmp_path):
+    code = tmp_path / "client.py"
+    code.write_text(
+        "import requests\n"
+        "url = 'http://api.example.com/data'\n"
+        "r = requests.get(url)\n"
+    )
+    analyzer = PermissionsAnalyzer()
+    findings = analyzer.analyze(tmp_path)
+    http_findings = [f for f in findings if "insecure http" in f.title.lower()]
+    assert len(http_findings) >= 1
+
+
+def test_ignores_localhost_http(tmp_path):
+    code = tmp_path / "dev.py"
+    code.write_text(
+        "url1 = 'http://localhost:8080/api'\n"
+        "url2 = 'http://127.0.0.1:3000'\n"
+        "url3 = 'http://0.0.0.0:5000'\n"
+    )
+    analyzer = PermissionsAnalyzer()
+    findings = analyzer.analyze(tmp_path)
+    http_findings = [f for f in findings if "insecure http" in f.title.lower()]
+    assert len(http_findings) == 0
 
 
 def test_all_findings_are_permissions_category(fake_repo_path):

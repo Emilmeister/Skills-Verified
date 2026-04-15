@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from skills_verified.analyzers.semgrep_analyzer import SemgrepAnalyzer
-from skills_verified.core.models import Category, Severity
+from skills_verified.core.models import Category
 
 
 def test_name():
@@ -11,13 +11,13 @@ def test_name():
 
 
 def test_is_available_when_installed(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/semgrep" if cmd == "semgrep" else None)
+    monkeypatch.setattr("skills_verified.analyzers.semgrep_analyzer.find_tool", lambda cmd: "/usr/bin/semgrep" if cmd == "semgrep" else None)
     analyzer = SemgrepAnalyzer()
     assert analyzer.is_available() is True
 
 
 def test_is_available_when_not_installed(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    monkeypatch.setattr("skills_verified.analyzers.semgrep_analyzer.find_tool", lambda cmd: None)
     analyzer = SemgrepAnalyzer()
     assert analyzer.is_available() is False
 

@@ -41,3 +41,44 @@ def test_cli_nonexistent_path():
     runner = CliRunner()
     result = runner.invoke(main, ["/nonexistent/path/xyz123"])
     assert result.exit_code != 0
+
+
+def test_cli_fail_on_strict_blocks_non_A(fake_repo_path):
+    """fake_repo has many findings so grade < A; strict should block."""
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        str(fake_repo_path), "--skip", "bandit,semgrep,cve,llm,container",
+        "--fail-on", "strict",
+    ])
+    assert result.exit_code == 1
+    assert "BLOCKED" in result.output
+
+
+def test_cli_fail_on_relaxed_passes_non_F(fake_repo_path):
+    """With only guardrails on a repo that isn't grade F, relaxed should pass."""
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        str(fake_repo_path), "--only", "permissions",
+        "--fail-on", "relaxed",
+    ])
+    assert result.exit_code == 0
+
+
+def test_cli_fail_on_standard_blocks_on_D(fake_repo_path):
+    """fake_repo has enough findings to push some categories to D/F."""
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        str(fake_repo_path), "--skip", "bandit,semgrep,cve,llm,container",
+        "--fail-on", "standard",
+    ])
+    # With all built-in analyzers the fake_repo should trigger at least CRITICAL
+    assert result.exit_code == 1
+
+
+def test_cli_no_fail_on_always_passes(fake_repo_path):
+    """Without --fail-on, exit code is always 0 regardless of grade."""
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        str(fake_repo_path), "--skip", "bandit,semgrep,cve,llm,container",
+    ])
+    assert result.exit_code == 0

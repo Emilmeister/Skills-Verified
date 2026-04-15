@@ -1,9 +1,5 @@
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-from skills_verified.analyzers.llm_analyzer import LlmAnalyzer, LlmConfig
-from skills_verified.core.models import Category, Severity
+from skills_verified.analyzers.llm_analyzer import LlmAnalyzer, LlmConfig, _LlmResponse
+from skills_verified.core.models import Severity
 
 
 def test_name():
@@ -23,10 +19,10 @@ def test_is_available_without_config():
     assert analyzer.is_available() is False
 
 
-def test_parse_llm_response():
+def test_convert_findings():
     config = LlmConfig(url="http://localhost", model="test", key="k")
     analyzer = LlmAnalyzer(config)
-    llm_response = json.dumps({
+    parsed = _LlmResponse.model_validate({
         "findings": [
             {
                 "title": "SQL injection risk",
@@ -38,7 +34,7 @@ def test_parse_llm_response():
             }
         ]
     })
-    findings = analyzer._parse_response(llm_response)
+    findings = analyzer._convert_findings(parsed)
     assert len(findings) == 1
     assert findings[0].title == "SQL injection risk"
     assert findings[0].severity == Severity.HIGH
@@ -46,11 +42,41 @@ def test_parse_llm_response():
     assert findings[0].analyzer == "llm"
 
 
-def test_parse_llm_response_invalid_json():
+def test_convert_findings_low_confidence_downgrade():
     config = LlmConfig(url="http://localhost", model="test", key="k")
     analyzer = LlmAnalyzer(config)
-    findings = analyzer._parse_response("not json at all")
-    assert findings == []
+    parsed = _LlmResponse.model_validate({
+        "findings": [
+            {
+                "title": "Maybe a bug",
+                "description": "Not sure",
+                "severity": "critical",
+                "confidence": 0.3,
+            }
+        ]
+    })
+    findings = analyzer._convert_findings(parsed)
+    assert findings[0].severity == Severity.MEDIUM
+
+
+def test_extract_json_direct():
+    assert LlmAnalyzer._extract_json('{"findings": []}') == {"findings": []}
+
+
+def test_extract_json_from_markdown():
+    text = 'Some text\n```json\n{"findings": []}\n```\nmore text'
+    assert LlmAnalyzer._extract_json(text) == {"findings": []}
+
+
+def test_extract_json_from_braces():
+    text = 'Here is my analysis: {"findings": [{"title": "x"}]} end.'
+    data = LlmAnalyzer._extract_json(text)
+    assert data is not None
+    assert "findings" in data
+
+
+def test_extract_json_returns_none_on_garbage():
+    assert LlmAnalyzer._extract_json("no json here at all") is None
 
 
 def test_batch_files():

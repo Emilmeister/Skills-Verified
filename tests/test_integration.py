@@ -1,9 +1,8 @@
-from pathlib import Path
 
 from click.testing import CliRunner
 
 from skills_verified.cli import main
-from skills_verified.core.models import Category, Grade, Severity
+from skills_verified.core.models import Category, Severity
 from skills_verified.core.pipeline import Pipeline
 from skills_verified.analyzers.pattern_analyzer import PatternAnalyzer
 from skills_verified.analyzers.guardrails_analyzer import GuardrailsAnalyzer
@@ -29,7 +28,6 @@ def test_full_pipeline_on_fake_repo(fake_repo_path):
     assert Category.CODE_SAFETY in categories_with_findings
     assert Category.GUARDRAILS in categories_with_findings
     assert Category.SUPPLY_CHAIN in categories_with_findings
-
     severities = {f.severity for f in report.findings}
     assert Severity.CRITICAL in severities or Severity.HIGH in severities
 
@@ -40,7 +38,7 @@ def test_full_cli_on_fake_repo(fake_repo_path, tmp_path):
     result = runner.invoke(main, [
         str(fake_repo_path),
         "--output", str(out_file),
-        "--skip", "bandit,semgrep,cve,llm",
+        "--skip", "bandit,semgrep,cve,llm,container",
     ])
     assert result.exit_code == 0
     assert "TRUST SCORE" in result.output

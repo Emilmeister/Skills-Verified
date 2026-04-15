@@ -1,7 +1,4 @@
 import json
-import subprocess
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from skills_verified.analyzers.cve_analyzer import CveAnalyzer
 from skills_verified.core.models import Category, Severity
@@ -14,14 +11,14 @@ def test_name():
 
 def test_is_available_with_pip_audit(monkeypatch):
     monkeypatch.setattr(
-        "shutil.which", lambda cmd: "/usr/bin/pip-audit" if cmd == "pip-audit" else None
+        "skills_verified.analyzers.cve_analyzer.find_tool", lambda cmd: "/usr/bin/pip-audit" if cmd == "pip-audit" else None
     )
     analyzer = CveAnalyzer()
     assert analyzer.is_available() is True
 
 
 def test_is_available_without_tools(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    monkeypatch.setattr("skills_verified.analyzers.cve_analyzer.find_tool", lambda cmd: None)
     analyzer = CveAnalyzer()
     assert analyzer.is_available() is False
 

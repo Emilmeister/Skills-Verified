@@ -19,7 +19,7 @@ PATTERNS = [
     },
     {
         "title": "Unsafe compile() call",
-        "pattern": re.compile(r"\bcompile\s*\("),
+        "pattern": re.compile(r"(?<!\w\.)(?<!re\.)\bcompile\s*\("),
         "severity": Severity.HIGH,
         "description": "compile() can be used to execute arbitrary code.",
     },

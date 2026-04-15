@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from skills_verified.analyzers.pattern_analyzer import PatternAnalyzer
 from skills_verified.core.models import Category, Severity

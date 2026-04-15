@@ -65,6 +65,14 @@ PERMISSION_PATTERNS = [
         "severity": Severity.MEDIUM,
         "description": "Creates raw network sockets. Unusual for typical applications.",
     },
+    {
+        "title": "Insecure HTTP URL (no TLS)",
+        "pattern": re.compile(
+            r"""['\"]http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])[^'"]+['\"]"""
+        ),
+        "severity": Severity.MEDIUM,
+        "description": "Uses plain HTTP instead of HTTPS. All network calls should use TLS 1.2+ to prevent interception.",
+    },
 ]
 
 SCAN_EXTENSIONS = {".py", ".js", ".mjs", ".ts", ".sh", ".bash", ".ps1"}

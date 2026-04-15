@@ -1,13 +1,14 @@
 import json
 import logging
-import shutil
 import subprocess
 from pathlib import Path
 
-from skills_verified.core.analyzer import Analyzer
+from skills_verified.core.analyzer import Analyzer, find_tool
 from skills_verified.core.models import Category, Finding, Severity
 
 logger = logging.getLogger(__name__)
+
+RULES_DIR = Path(__file__).resolve().parent.parent / "rules"
 
 SEVERITY_MAP = {
     "ERROR": Severity.HIGH,
@@ -20,19 +21,21 @@ class SemgrepAnalyzer(Analyzer):
     name = "semgrep"
 
     def is_available(self) -> bool:
-        return shutil.which("semgrep") is not None
+        return find_tool("semgrep") is not None
 
     def analyze(self, repo_path: Path) -> list[Finding]:
         try:
+            cmd = [
+                find_tool("semgrep"), "scan",
+                "--config", "p/security-audit",
+                "--config", "p/python",
+            ]
+            ai_rules = RULES_DIR / "ai-skills.yml"
+            if ai_rules.is_file():
+                cmd.extend(["--config", str(ai_rules)])
+            cmd.extend(["--json", "--quiet", str(repo_path)])
             result = subprocess.run(
-                [
-                    "semgrep", "scan",
-                    "--config", "p/security-audit",
-                    "--config", "p/python",
-                    "--json",
-                    "--quiet",
-                    str(repo_path),
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,

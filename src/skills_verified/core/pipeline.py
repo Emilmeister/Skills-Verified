@@ -6,6 +6,9 @@ from skills_verified.core.analyzer import Analyzer
 from skills_verified.core.models import Finding, Report
 from skills_verified.core.scorer import Scorer
 
+# Lazy import to avoid circular deps — checked by name at runtime
+_LLM_ANALYZER_NAME = "llm"
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +28,10 @@ class Pipeline:
                 continue
             used.append(analyzer.name)
             try:
-                findings = analyzer.analyze(repo_path)
+                if analyzer.name == _LLM_ANALYZER_NAME:
+                    findings = analyzer.analyze(repo_path, existing_findings=all_findings)
+                else:
+                    findings = analyzer.analyze(repo_path)
                 all_findings.extend(findings)
             except Exception:
                 logger.exception("Analyzer %s crashed", analyzer.name)

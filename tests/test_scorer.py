@@ -1,5 +1,5 @@
 from skills_verified.core.models import (
-    Severity, Category, Grade, Finding, CategoryScore,
+    Severity, Category, Grade, Finding,
 )
 from skills_verified.core.scorer import Scorer
 

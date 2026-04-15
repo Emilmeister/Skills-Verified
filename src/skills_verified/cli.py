@@ -5,6 +5,7 @@ import click
 from rich.console import Console
 
 from skills_verified.analyzers.bandit_analyzer import BanditAnalyzer
+from skills_verified.analyzers.container_analyzer import ContainerAnalyzer
 from skills_verified.analyzers.cve_analyzer import CveAnalyzer
 from skills_verified.analyzers.guardrails_analyzer import GuardrailsAnalyzer
 from skills_verified.analyzers.llm_analyzer import LlmAnalyzer, LlmConfig
@@ -12,10 +13,11 @@ from skills_verified.analyzers.pattern_analyzer import PatternAnalyzer
 from skills_verified.analyzers.permissions_analyzer import PermissionsAnalyzer
 from skills_verified.analyzers.semgrep_analyzer import SemgrepAnalyzer
 from skills_verified.analyzers.supply_chain_analyzer import SupplyChainAnalyzer
+from skills_verified.core.models import Grade, Report, Severity
 from skills_verified.core.pipeline import Pipeline
 from skills_verified.output.console import render_report
 from skills_verified.output.json_report import save_json_report
-from skills_verified.repo.fetcher import fetch_repo, is_git_url
+from skills_verified.repo.fetcher import fetch_repo
 
 console = Console()
 
@@ -28,6 +30,15 @@ console = Console()
 @click.option("--llm-url", type=str, default=None, envvar="SV_LLM_URL", help="OpenAI-compatible API base URL")
 @click.option("--llm-model", type=str, default=None, envvar="SV_LLM_MODEL", help="LLM model name")
 @click.option("--llm-key", type=str, default=None, envvar="SV_LLM_KEY", help="LLM API key")
+@click.option("--llm-passes", type=int, default=1, envvar="SV_LLM_PASSES", help="Number of LLM passes for consensus (default 1, recommended 3 for CI/CD)")
+@click.option("--image", type=str, default=None, help="Docker image to scan with grype (e.g. python:3.11-slim)")
+@click.option("--branch", "-b", type=str, default=None, help="Git branch to clone (e.g. main, security-fixes)")
+@click.option(
+    "--fail-on",
+    type=click.Choice(["strict", "standard", "relaxed"], case_sensitive=False),
+    default=None,
+    help="Exit with code 1 if skill fails the chosen policy (strict: < A or any CRITICAL; standard: < C or any CRITICAL; relaxed: F or > 2 CRITICAL)",
+)
 def main(
     source: str,
     output: str | None,
@@ -36,6 +47,10 @@ def main(
     llm_url: str | None,
     llm_model: str | None,
     llm_key: str | None,
+    llm_passes: int,
+    image: str | None,
+    branch: str | None,
+    fail_on: str | None,
 ) -> None:
     """Skills Verified — AI Agent Trust Scanner.
 
@@ -55,7 +70,8 @@ def main(
         GuardrailsAnalyzer(),
         PermissionsAnalyzer(),
         SupplyChainAnalyzer(),
-        LlmAnalyzer(config=llm_config),
+        ContainerAnalyzer(image=image),
+        LlmAnalyzer(config=llm_config, passes=llm_passes),
     ]
 
     skip_set = set(skip.split(",")) if skip else set()
@@ -70,7 +86,7 @@ def main(
         analyzers.append(a)
 
     try:
-        repo_path = fetch_repo(source)
+        repo_path = fetch_repo(source, branch=branch)
     except (ValueError, Exception) as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
@@ -87,3 +103,37 @@ def main(
     if output:
         save_json_report(report, Path(output))
         console.print(f"  [dim]JSON report saved to {output}[/dim]\n")
+
+    if fail_on:
+        _apply_gate(report, fail_on, console)
+
+
+def _apply_gate(report: Report, policy: str, console: Console) -> None:
+    grade = report.overall_grade
+    criticals = sum(1 for f in report.findings if f.severity == Severity.CRITICAL)
+
+    blocked = False
+    reason = ""
+
+    if policy == "strict":
+        # Grade must be A, zero CRITICALs
+        if grade != Grade.A:
+            blocked, reason = True, f"Grade {grade.value} is below A"
+        elif criticals > 0:
+            blocked, reason = True, f"{criticals} critical finding(s)"
+    elif policy == "standard":
+        # Grade must be C or above, zero CRITICALs
+        if grade in (Grade.D, Grade.F):
+            blocked, reason = True, f"Grade {grade.value} is below C"
+        elif criticals > 0:
+            blocked, reason = True, f"{criticals} critical finding(s)"
+    elif policy == "relaxed":
+        # Only block on F or > 2 CRITICALs
+        if grade == Grade.F:
+            blocked, reason = True, "Grade F"
+        elif criticals > 2:
+            blocked, reason = True, f"{criticals} critical findings (> 2)"
+
+    if blocked:
+        console.print(f"  [red bold]BLOCKED ({policy}):[/red bold] {reason}\n")
+        sys.exit(1)

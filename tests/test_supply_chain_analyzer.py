@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from skills_verified.analyzers.supply_chain_analyzer import SupplyChainAnalyzer
 from skills_verified.core.models import Category, Severity

@@ -11,13 +11,13 @@ def test_name():
 
 
 def test_is_available_when_installed(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/bandit" if cmd == "bandit" else None)
+    monkeypatch.setattr("skills_verified.analyzers.bandit_analyzer.find_tool", lambda cmd: "/usr/bin/bandit" if cmd == "bandit" else None)
     analyzer = BanditAnalyzer()
     assert analyzer.is_available() is True
 
 
 def test_is_available_when_not_installed(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    monkeypatch.setattr("skills_verified.analyzers.bandit_analyzer.find_tool", lambda cmd: None)
     analyzer = BanditAnalyzer()
     assert analyzer.is_available() is False
 

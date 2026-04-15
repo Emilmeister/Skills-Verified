@@ -1,7 +1,6 @@
-from pathlib import Path
 
 from skills_verified.analyzers.guardrails_analyzer import GuardrailsAnalyzer
-from skills_verified.core.models import Category, Severity
+from skills_verified.core.models import Category
 
 
 def test_is_available():

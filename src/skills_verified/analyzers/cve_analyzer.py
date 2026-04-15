@@ -1,10 +1,9 @@
 import json
 import logging
-import shutil
 import subprocess
 from pathlib import Path
 
-from skills_verified.core.analyzer import Analyzer
+from skills_verified.core.analyzer import Analyzer, find_tool
 from skills_verified.core.models import Category, Finding, Severity
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class CveAnalyzer(Analyzer):
     name = "cve"
 
     def is_available(self) -> bool:
-        return shutil.which("pip-audit") is not None or shutil.which("npm") is not None
+        return find_tool("pip-audit") is not None or find_tool("npm") is not None
 
     def analyze(self, repo_path: Path) -> list[Finding]:
         findings: list[Finding] = []
@@ -32,10 +31,10 @@ class CveAnalyzer(Analyzer):
             + list(repo_path.rglob("Pipfile"))
             + list(repo_path.rglob("pyproject.toml"))
         )
-        if req_files and shutil.which("pip-audit"):
+        if req_files and find_tool("pip-audit"):
             for req_file in repo_path.rglob("requirements*.txt"):
                 findings.extend(self._run_pip_audit(req_file, repo_path))
-        if list(repo_path.rglob("package-lock.json")) and shutil.which("npm"):
+        if list(repo_path.rglob("package-lock.json")) and find_tool("npm"):
             for lock_file in repo_path.rglob("package-lock.json"):
                 findings.extend(self._run_npm_audit(lock_file.parent, repo_path))
         return findings
@@ -43,7 +42,7 @@ class CveAnalyzer(Analyzer):
     def _run_pip_audit(self, req_file: Path, repo_path: Path) -> list[Finding]:
         try:
             result = subprocess.run(
-                ["pip-audit", "-r", str(req_file), "-f", "json", "--desc"],
+                [find_tool("pip-audit"), "-r", str(req_file), "-f", "json", "--desc"],
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -57,7 +56,7 @@ class CveAnalyzer(Analyzer):
     def _run_npm_audit(self, pkg_dir: Path, repo_path: Path) -> list[Finding]:
         try:
             result = subprocess.run(
-                ["npm", "audit", "--json"],
+                [find_tool("npm"), "audit", "--json"],
                 capture_output=True,
                 text=True,
                 timeout=120,
