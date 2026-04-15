@@ -16,6 +16,7 @@ class Category(Enum):
     GUARDRAILS = "guardrails"
     PERMISSIONS = "permissions"
     SUPPLY_CHAIN = "supply_chain"
+    AI_BOM = "ai_bom"
 
 
 class Grade(Enum):

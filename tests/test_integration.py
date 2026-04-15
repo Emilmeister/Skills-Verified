@@ -22,7 +22,7 @@ def test_full_pipeline_on_fake_repo(fake_repo_path):
 
     assert len(report.findings) > 0
     assert report.overall_score < 100
-    assert len(report.categories) == 5
+    assert len(report.categories) == 6
 
     categories_with_findings = {f.category for f in report.findings}
     assert Category.CODE_SAFETY in categories_with_findings

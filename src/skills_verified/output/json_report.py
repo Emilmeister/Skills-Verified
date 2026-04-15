@@ -4,8 +4,8 @@ from pathlib import Path
 from skills_verified.core.models import Report
 
 
-def report_to_dict(report: Report) -> dict:
-    return {
+def report_to_dict(report: Report, aibom: dict | None = None) -> dict:
+    data = {
         "repo_url": report.repo_url,
         "overall_score": report.overall_score,
         "overall_grade": report.overall_grade.value,
@@ -38,8 +38,11 @@ def report_to_dict(report: Report) -> dict:
         "llm_used": report.llm_used,
         "scan_duration_seconds": report.scan_duration_seconds,
     }
+    if aibom is not None:
+        data["aibom"] = aibom
+    return data
 
 
-def save_json_report(report: Report, path: Path) -> None:
-    data = report_to_dict(report)
+def save_json_report(report: Report, path: Path, aibom: dict | None = None) -> None:
+    data = report_to_dict(report, aibom=aibom)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))

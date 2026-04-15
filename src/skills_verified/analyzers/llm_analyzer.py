@@ -1,12 +1,14 @@
 import json
 import logging
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel
 
+from skills_verified.analyzers.code_reduce import reduce_context
+from skills_verified.analyzers.pattern_analyzer import PATTERNS
 from skills_verified.core.analyzer import Analyzer
 from skills_verified.core.models import Category, Finding, Severity
 
@@ -82,6 +84,14 @@ SEVERITY_MAP = {
 }
 
 
+def _make_pattern_probe(seed: Finding):
+    matching = next((p for p in PATTERNS if p["title"] == seed.title), None)
+    if matching is not None:
+        rx = matching["pattern"]
+        return lambda text: bool(rx.search(text))
+    return lambda text: any(p["pattern"].search(text) for p in PATTERNS)
+
+
 @dataclass
 class LlmConfig:
     url: str
@@ -92,9 +102,17 @@ class LlmConfig:
 class LlmAnalyzer(Analyzer):
     name = "llm"
 
-    def __init__(self, config: LlmConfig | None, passes: int = 1):
+    def __init__(
+        self,
+        config: LlmConfig | None,
+        passes: int = 1,
+        reduce: bool = False,
+        verifier=None,
+    ):
         self.config = config
         self.passes = max(1, passes)
+        self.reduce = reduce
+        self.verifier = verifier
 
     def is_available(self) -> bool:
         return self.config is not None
@@ -107,7 +125,12 @@ class LlmAnalyzer(Analyzer):
         except ImportError:
             logger.warning("openai package not installed, skipping LLM analysis")
             return []
-        files = self._collect_files(repo_path)
+        if self.reduce and existing_findings:
+            files = self._collect_reduced_files(repo_path, existing_findings)
+            if not files:
+                files = self._collect_files(repo_path)
+        else:
+            files = self._collect_files(repo_path)
         if not files:
             return []
         client = OpenAI(base_url=self.config.url, api_key=self.config.key)
@@ -120,6 +143,9 @@ class LlmAnalyzer(Analyzer):
             raw = self._consensus_pass(client, batches)
 
         deduped = self._dedup_vs_static(raw, existing_findings or [])
+        if self.verifier is not None and deduped:
+            from skills_verified.analyzers.llm_verifier import filter_verified
+            deduped = filter_verified(self.verifier, repo_path, deduped)
         return deduped
 
     def _single_pass(self, client, batches: list[dict[str, str]]) -> list[Finding]:
@@ -274,6 +300,33 @@ class LlmAnalyzer(Analyzer):
                 confidence=confidence,
             ))
         return results
+
+    def _collect_reduced_files(
+        self,
+        repo_path: Path,
+        existing_findings: list[Finding],
+    ) -> dict[str, str]:
+        seeds = [
+            f for f in existing_findings
+            if f.severity in (Severity.CRITICAL, Severity.HIGH)
+            and f.analyzer in {"pattern", "bandit", "semgrep"}
+            and f.file_path
+        ]
+        by_file: dict[str, list[Finding]] = defaultdict(list)
+        for f in seeds:
+            by_file[f.file_path].append(f)
+
+        files: dict[str, str] = {}
+        for rel_path, file_seeds in by_file.items():
+            full_path = repo_path / rel_path
+            if not full_path.is_file():
+                continue
+            seed = file_seeds[0]
+            probe = _make_pattern_probe(seed)
+            reduced = reduce_context(full_path, seed, repo_path, probe)
+            if reduced:
+                files[rel_path] = reduced
+        return files
 
     def _collect_files(self, repo_path: Path) -> dict[str, str]:
         files: dict[str, str] = {}

@@ -17,10 +17,11 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["openai>=1.0"]
+mcp = ["mcp>=1.0"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.4"]
 
 [project.scripts]
-skills-verified = "skills_verified.cli:main"
+skills-verified = "skills_verified.cli:cli_entry"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

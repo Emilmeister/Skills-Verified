@@ -1,5 +1,5 @@
 from skills_verified.analyzers.llm_analyzer import LlmAnalyzer, LlmConfig, _LlmResponse
-from skills_verified.core.models import Severity
+from skills_verified.core.models import Category, Finding, Severity
 
 
 def test_name():
@@ -77,6 +77,56 @@ def test_extract_json_from_braces():
 
 def test_extract_json_returns_none_on_garbage():
     assert LlmAnalyzer._extract_json("no json here at all") is None
+
+
+def test_collect_reduced_files_shrinks_input(tmp_path):
+    src = [
+        "import os",
+        "import sys",
+        "def a():",
+        "    return 1",
+        "def b():",
+        "    return 2",
+        "def c():",
+        "    eval('1+1')",
+        "def d():",
+        "    return 4",
+    ]
+    file_path = tmp_path / "target.py"
+    file_path.write_text("\n".join(src))
+    seed = Finding(
+        title="Unsafe eval() call",
+        description="",
+        severity=Severity.CRITICAL,
+        category=Category.CODE_SAFETY,
+        file_path="target.py",
+        line_number=8,
+        analyzer="pattern",
+    )
+    config = LlmConfig(url="http://x", model="m", key="k")
+    analyzer = LlmAnalyzer(config, reduce=True)
+
+    files = analyzer._collect_reduced_files(tmp_path, [seed])
+    assert "target.py" in files
+    reduced = files["target.py"]
+    assert "eval(" in reduced
+    assert len(reduced) < len("\n".join(src))
+
+
+def test_collect_reduced_files_skips_low_severity(tmp_path):
+    file_path = tmp_path / "x.py"
+    file_path.write_text("eval('1')\n")
+    seed = Finding(
+        title="Unsafe eval() call",
+        description="",
+        severity=Severity.LOW,
+        category=Category.CODE_SAFETY,
+        file_path="x.py",
+        line_number=1,
+        analyzer="pattern",
+    )
+    analyzer = LlmAnalyzer(LlmConfig(url="x", model="m", key="k"), reduce=True)
+    assert analyzer._collect_reduced_files(tmp_path, [seed]) == {}
 
 
 def test_batch_files():
