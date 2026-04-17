@@ -45,4 +45,5 @@ def report_to_dict(report: Report, aibom: dict | None = None) -> dict:
 
 def save_json_report(report: Report, path: Path, aibom: dict | None = None) -> None:
     data = report_to_dict(report, aibom=aibom)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
