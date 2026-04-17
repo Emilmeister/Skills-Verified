@@ -1,0 +1,432 @@
+# Curated risk profiles for popular LLM / embedding models.
+# Scores in [0, 1], higher = safer. `overall`: low | medium | high | critical | unknown.
+# Data is best-effort aggregation of public benchmarks (HarmBench, AgentHarm) and
+# public research. Update periodically — see README for the refresh workflow.
+
+models:
+  - id: "gpt-4o"
+    provider: "openai"
+    risk:
+      jailbreak_resistance: 0.85
+      prompt_injection: 0.7
+      data_leak: 0.85
+      overall: "low"
+    owasp_llm_top10:
+      - "LLM01_prompt_injection: medium"
+      - "LLM06_sensitive_info: low"
+    notes: "Strong alignment; multi-turn jailbreaks remain possible."
+
+  - id: "gpt-4o-mini"
+    provider: "openai"
+    risk:
+      jailbreak_resistance: 0.75
+      prompt_injection: 0.6
+      data_leak: 0.85
+      overall: "medium"
+    owasp_llm_top10:
+      - "LLM01_prompt_injection: high"
+
+  - id: "gpt-4-turbo"
+    provider: "openai"
+    risk:
+      overall: "low"
+
+  - id: "gpt-4"
+    provider: "openai"
+    risk:
+      jailbreak_resistance: 0.8
+      overall: "low"
+
+  - id: "gpt-3.5-turbo"
+    provider: "openai"
+    risk:
+      jailbreak_resistance: 0.55
+      prompt_injection: 0.5
+      overall: "high"
+    owasp_llm_top10:
+      - "LLM01_prompt_injection: high"
+      - "LLM06_sensitive_info: medium"
+    notes: "Older alignment; multiple public jailbreaks documented."
+
+  - id: "o1-mini"
+    provider: "openai"
+    risk:
+      overall: "medium"
+
+  - id: "o1-preview"
+    provider: "openai"
+    risk:
+      overall: "medium"
+
+  - id: "claude-3-5-sonnet"
+    provider: "anthropic"
+    risk:
+      jailbreak_resistance: 0.9
+      prompt_injection: 0.8
+      data_leak: 0.9
+      overall: "low"
+
+  - id: "claude-3-5-haiku"
+    provider: "anthropic"
+    risk:
+      overall: "low"
+
+  - id: "claude-3-opus"
+    provider: "anthropic"
+    risk:
+      overall: "low"
+
+  - id: "claude-3-sonnet"
+    provider: "anthropic"
+    risk:
+      overall: "low"
+
+  - id: "claude-3-haiku"
+    provider: "anthropic"
+    risk:
+      overall: "medium"
+
+  - id: "meta-llama/Llama-3.1-70B"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.4
+      overall: "high"
+    owasp_llm_top10:
+      - "LLM01_prompt_injection: high"
+
+  - id: "meta-llama/Llama-3.1-8B"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  - id: "mistralai/Mistral-7B-Instruct-v0.2"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.35
+      overall: "critical"
+    notes: "Weak safety training; jailbreaks trivial in public research."
+
+  - id: "deepseek-ai/DeepSeek-R1"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "Qwen/Qwen2.5-72B-Instruct"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "google/gemma-2-9b"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "google/gemma-2-27b"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "microsoft/Phi-3.5-mini-instruct"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "microsoft/phi-4"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "Qwen/Qwen2.5-7B-Instruct"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  - id: "Qwen/Qwen2.5-Coder-32B-Instruct"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "deepseek-ai/DeepSeek-V3"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "deepseek-ai/DeepSeek-Coder-V2-Instruct"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.4
+      overall: "high"
+
+  - id: "mistralai/Mistral-Large-Instruct-2407"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  - id: "NousResearch/Hermes-3-Llama-3.1-70B"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+    notes: "Hermes series intentionally less restricted; explicit RLHF relaxation."
+
+  - id: "HuggingFaceH4/zephyr-7b-beta"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  - id: "tiiuae/falcon-40b-instruct"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  - id: "01-ai/Yi-1.5-34B-Chat"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+
+  # --- Russian-language LLMs ---
+
+  - id: "t-tech/T-lite-it-1.0"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.5
+      overall: "medium"
+    notes: "T-Bank's Russian instruction-tuned model; limited public red-team data."
+
+  - id: "t-tech/T-pro-it-1.0"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+    notes: "T-Bank's larger Russian instruction model; limited public red-team data."
+
+  - id: "ai-forever/ruGPT-3.5-13B"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.35
+      overall: "high"
+    notes: "SberDevices base model without instruction tuning or safety alignment."
+
+  - id: "ai-forever/FRED-T5-1.7B"
+    provider: "huggingface"
+    risk:
+      overall: "medium"
+    notes: "Russian T5; base encoder-decoder, limited safety fine-tuning."
+
+  - id: "ai-forever/mGPT"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  - id: "IlyaGusev/saiga_llama3_8b"
+    provider: "huggingface"
+    risk:
+      jailbreak_resistance: 0.4
+      overall: "high"
+    notes: "Community Russian fine-tune of Llama; inherits Llama jailbreak surface."
+
+  - id: "IlyaGusev/saiga_yandexgpt_8b"
+    provider: "huggingface"
+    risk:
+      overall: "high"
+
+  # --- Popular embedding models ---
+
+  - id: "BAAI/bge-large-en-v1.5"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+    notes: "Dense embedding; risks limited to embedding-inversion + stored-data leakage."
+
+  - id: "BAAI/bge-m3"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "BAAI/bge-reranker-v2-m3"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "BAAI/bge-small-en-v1.5"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "sentence-transformers/all-MiniLM-L6-v2"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "sentence-transformers/all-mpnet-base-v2"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "cointegrated/LaBSE-en-ru"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+    notes: "Russian-English sentence embedder; low behavioral-risk surface."
+
+  - id: "cointegrated/rubert-tiny2"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "intfloat/multilingual-e5-large"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "intfloat/e5-large-v2"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "text-embedding-3-large"
+    provider: "openai"
+    risk:
+      overall: "low"
+
+  - id: "text-embedding-3-small"
+    provider: "openai"
+    risk:
+      overall: "low"
+
+  - id: "text-embedding-ada-002"
+    provider: "openai"
+    risk:
+      overall: "low"
+    notes: "Legacy OpenAI embedding; superseded by text-embedding-3-*."
+
+  # --- Qwen embeddings ---
+
+  - id: "Qwen/Qwen3-Embedding-8B"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+    notes: "Alibaba Qwen3 family embedding; dense encoder, low behavioral-risk surface."
+
+  - id: "Qwen/Qwen3-Embedding-4B"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "Qwen/Qwen3-Embedding-0.6B"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  # --- e5 / gte / nomic / jina / mxbai / arctic ---
+
+  - id: "intfloat/multilingual-e5-large-instruct"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "intfloat/e5-mistral-7b-instruct"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "thenlper/gte-large"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "Alibaba-NLP/gte-large-en-v1.5"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "Alibaba-NLP/gte-Qwen2-7B-instruct"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "nomic-ai/nomic-embed-text-v1.5"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "jinaai/jina-embeddings-v3"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "jinaai/jina-embeddings-v2-base-en"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "mixedbread-ai/mxbai-embed-large-v1"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "Snowflake/snowflake-arctic-embed-l"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "Snowflake/snowflake-arctic-embed-m"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  - id: "google/embeddinggemma-300m"
+    provider: "huggingface"
+    risk:
+      overall: "low"
+
+  # --- API-only embedding providers ---
+
+  - id: "voyage-3"
+    provider: "voyage"
+    risk:
+      overall: "low"
+
+  - id: "voyage-3-large"
+    provider: "voyage"
+    risk:
+      overall: "low"
+
+  - id: "voyage-large-2-instruct"
+    provider: "voyage"
+    risk:
+      overall: "low"
+
+  - id: "voyage-code-3"
+    provider: "voyage"
+    risk:
+      overall: "low"
+
+  - id: "embed-english-v3.0"
+    provider: "cohere"
+    risk:
+      overall: "low"
+
+  - id: "embed-multilingual-v3.0"
+    provider: "cohere"
+    risk:
+      overall: "low"
+
+  - id: "embed-english-light-v3.0"
+    provider: "cohere"
+    risk:
+      overall: "low"
+
+  - id: "text-embedding-gecko-001"
+    provider: "google"
+    risk:
+      overall: "low"
+
