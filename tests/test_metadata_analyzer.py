@@ -1,8 +1,5 @@
-import json
-from pathlib import Path
-
 from skills_verified.analyzers.metadata_analyzer import MetadataAnalyzer
-from skills_verified.core.models import Category, Severity
+from skills_verified.core.models import Category
 from skills_verified.platforms.detector import PlatformDetector
 
 
@@ -32,15 +29,15 @@ def test_finds_description_injection(tmp_path):
     analyzer = MetadataAnalyzer()
     findings = analyzer.analyze(tmp_path, platforms=platforms)
     desc_findings = [
-        f for f in findings
+        f
+        for f in findings
         if "description" in f.title.lower() and "injection" in f.title.lower()
     ]
     assert len(desc_findings) >= 1
     assert desc_findings[0].category == Category.CONFIG_INJECTION
 
 
-def test_finds_deceptive_name(tmp_path):
-    """Detects 'safe-security-audit-official-plugin' as deceptive naming."""
+def test_security_audit_name_is_not_speculatively_deceptive(tmp_path):
     skill_md = tmp_path / "SKILL.md"
     skill_md.write_text(
         "---\n"
@@ -55,11 +52,7 @@ def test_finds_deceptive_name(tmp_path):
     detector = PlatformDetector()
     platforms = detector.detect(tmp_path)
 
-    analyzer = MetadataAnalyzer()
-    findings = analyzer.analyze(tmp_path, platforms=platforms)
-    deceptive_findings = [f for f in findings if "deceptive" in f.title.lower()]
-    assert len(deceptive_findings) >= 1
-    assert deceptive_findings[0].category == Category.CONFIG_INJECTION
+    assert MetadataAnalyzer().analyze(tmp_path, platforms=platforms) == []
 
 
 def test_no_platforms_returns_empty(tmp_path):
@@ -67,3 +60,13 @@ def test_no_platforms_returns_empty(tmp_path):
     analyzer = MetadataAnalyzer()
     findings = analyzer.analyze(tmp_path, platforms=[])
     assert findings == []
+
+
+def test_system_prompt_and_role_documentation_is_not_injection(tmp_path):
+    (tmp_path / "SKILL.md").write_text(
+        "---\nname: prompts\ndescription: System prompt library\n---\n"
+        "Use this system prompt to let the model act as a reviewer.\n"
+    )
+    platforms = PlatformDetector().detect(tmp_path)
+
+    assert MetadataAnalyzer().analyze(tmp_path, platforms=platforms) == []

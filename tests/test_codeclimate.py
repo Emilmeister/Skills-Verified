@@ -24,13 +24,18 @@ def make_finding(**kwargs) -> Finding:
 # Severity mapping tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("severity,expected", [
-    (Severity.CRITICAL, "blocker"),
-    (Severity.HIGH, "critical"),
-    (Severity.MEDIUM, "major"),
-    (Severity.LOW, "minor"),
-    (Severity.INFO, "info"),
-])
+
+@pytest.mark.parametrize(
+    "severity,expected",
+    [
+        (Severity.CRITICAL, "blocker"),
+        (Severity.HIGH, "critical"),
+        (Severity.MEDIUM, "major"),
+        (Severity.LOW, "minor"),
+        (Severity.INFO, "info"),
+        (Severity.UNKNOWN, "info"),
+    ],
+)
 def test_severity_mapping(severity, expected):
     finding = make_finding(severity=severity)
     issues = generate_codeclimate([finding])
@@ -41,12 +46,14 @@ def test_severity_mapping(severity, expected):
 # Fingerprint tests
 # ---------------------------------------------------------------------------
 
+
 def test_fingerprint_is_hex_string():
     finding = make_finding()
     issues = generate_codeclimate([finding])
     fp = issues[0]["fingerprint"]
     assert len(fp) == 64
     assert all(c in "0123456789abcdef" for c in fp), f"Not a valid SHA256 hex: {fp}"
+    assert fp == finding.fingerprint.removeprefix("sha256:")
 
 
 def test_different_findings_get_different_fingerprints():
@@ -59,6 +66,7 @@ def test_different_findings_get_different_fingerprints():
 # ---------------------------------------------------------------------------
 # Location tests
 # ---------------------------------------------------------------------------
+
 
 def test_location_has_path_and_line():
     finding = make_finding(file_path="src/main.py", line_number=42)
@@ -79,6 +87,7 @@ def test_missing_file_path_defaults():
 # ---------------------------------------------------------------------------
 # Field presence tests
 # ---------------------------------------------------------------------------
+
 
 def test_check_name_is_analyzer():
     finding = make_finding(analyzer="test_analyzer")
@@ -108,10 +117,13 @@ def test_categories_contains_security():
 # save_codeclimate tests
 # ---------------------------------------------------------------------------
 
+
 def test_save_codeclimate(tmp_path):
     findings = [
         make_finding(title="F1", severity=Severity.CRITICAL),
-        make_finding(title="F2", severity=Severity.LOW, file_path=None, line_number=None),
+        make_finding(
+            title="F2", severity=Severity.LOW, file_path=None, line_number=None
+        ),
     ]
     out_file = tmp_path / "codeclimate.json"
     save_codeclimate(findings, out_file)

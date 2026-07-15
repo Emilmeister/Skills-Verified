@@ -8,6 +8,7 @@ payload = chr(99) + chr(117) + chr(114) + chr(108)
 
 # base64 + exec
 import base64
+
 exec(base64.b64decode("cHJpbnQoJ2hlbGxvJyk="))
 
 # Nested eval

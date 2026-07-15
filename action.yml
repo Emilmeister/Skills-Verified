@@ -1,226 +1,119 @@
-name: Skills Verified — AI Agent Trust Scanner
-description: Scan an AI agent repository for vulnerabilities and compute a Trust Score.
+name: Skills Verified Security Analyzer
+description: Scan an agent-skill repository and emit a policy-free JSON report.
 
 branding:
-  icon: 'shield'
-  color: 'blue'
+  icon: shield
+  color: blue
 
 inputs:
   source:
-    description: 'Path or URL to scan'
+    description: Local repository path or Git URL to scan
     required: false
-    default: '.'
-  threshold:
-    description: 'Minimum score (0-100); fail if below'
-    required: false
-    default: ''
-  threshold-grade:
-    description: 'Minimum grade (A/B/C/D/F); fail if worse'
-    required: false
-    default: ''
+    default: .
   skip:
-    description: 'Comma-separated list of analyzers to skip'
+    description: Comma-separated analyzer names to skip
     required: false
     default: ''
   only:
-    description: 'Comma-separated list of analyzers to run exclusively'
+    description: Comma-separated analyzer names to run exclusively
     required: false
     default: ''
   use-docker:
-    description: 'Use Docker image instead of pip install'
+    description: Build and run the repository Docker image
     required: false
     default: 'false'
   python-version:
-    description: 'Python version to use (if not Docker)'
+    description: Python version used outside Docker
     required: false
     default: '3.11'
-  comment-on-pr:
-    description: 'Post Markdown comment on PR'
-    required: false
-    default: 'true'
-  comment-style:
-    description: 'Markdown comment style: full or summary'
-    required: false
-    default: 'full'
-  generate-badge:
-    description: 'Generate badge.json artifact'
-    required: false
-    default: 'true'
 
 outputs:
-  score:
-    description: 'Overall trust score (number 0-100)'
-    value: ${{ steps.scan.outputs.score }}
-  grade:
-    description: 'Overall trust grade (letter A-F)'
-    value: ${{ steps.scan.outputs.grade }}
-  passed:
-    description: 'Whether the scan passed the threshold (true/false)'
-    value: ${{ steps.scan.outputs.passed }}
   report-path:
-    description: 'Path to the JSON report file'
+    description: Absolute path to the JSON scan report
     value: ${{ steps.scan.outputs.report-path }}
+  scan-status:
+    description: Technical scan status (complete, partial, or failed)
+    value: ${{ steps.scan.outputs.scan-status }}
+  findings-count:
+    description: Number of findings in the report
+    value: ${{ steps.scan.outputs.findings-count }}
 
 runs:
-  using: 'composite'
+  using: composite
   steps:
-    # ── 1. Setup Python (skip when using Docker) ─────────────────────────────
     - name: Set up Python
       if: inputs.use-docker != 'true'
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
 
-    # ── 2. Install skills-verified via pip (skip when using Docker) ──────────
-    - name: Install skills-verified
+    - name: Install Skills Verified
       if: inputs.use-docker != 'true'
       shell: bash
-      run: |
-        pip install -e "${{ github.action_path }}[dev]" bandit semgrep pip-audit
+      run: python -m pip install "${{ github.action_path }}[scanners]"
 
-    # ── 3. Pull / build Docker image (only when use-docker=true) ────────────
-    - name: Build Docker image
+    - name: Build Skills Verified image
       if: inputs.use-docker == 'true'
       shell: bash
-      run: |
-        docker build -t skills-verified:action "${{ github.action_path }}"
+      run: docker build --tag skills-verified:action "${{ github.action_path }}"
 
-    # ── 4. Run scan ──────────────────────────────────────────────────────────
-    - name: Run skills-verified scan
+    - name: Scan repository
       id: scan
       shell: bash
       env:
         SV_SOURCE: ${{ inputs.source }}
-        SV_THRESHOLD: ${{ inputs.threshold }}
-        SV_THRESHOLD_GRADE: ${{ inputs.threshold-grade }}
         SV_SKIP: ${{ inputs.skip }}
         SV_ONLY: ${{ inputs.only }}
         SV_USE_DOCKER: ${{ inputs.use-docker }}
-        SV_COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
-        SV_COMMENT_STYLE: ${{ inputs.comment-style }}
-        SV_GENERATE_BADGE: ${{ inputs.generate-badge }}
       run: |
         set -euo pipefail
 
-        OUTPUT_DIR="${{ runner.temp }}/skills-verified-output"
-        mkdir -p "$OUTPUT_DIR"
+        output_dir="${{ runner.temp }}/skills-verified-output"
+        report_path="$output_dir/report.json"
+        mkdir -p "$output_dir"
 
-        REPORT_JSON="$OUTPUT_DIR/report.json"
-
-        # ── Build --format flags ─────────────────────────────────────────────
-        FORMAT_FLAGS="--format github"
-
-        if [ "${SV_GENERATE_BADGE}" = "true" ]; then
-          FORMAT_FLAGS="$FORMAT_FLAGS --format badge"
+        analyzer_args=()
+        if [[ -n "$SV_SKIP" ]]; then
+          analyzer_args+=(--skip "$SV_SKIP")
+        fi
+        if [[ -n "$SV_ONLY" ]]; then
+          analyzer_args+=(--only "$SV_ONLY")
         fi
 
-        if [ "${SV_COMMENT_ON_PR}" = "true" ]; then
-          FORMAT_FLAGS="$FORMAT_FLAGS --format markdown"
-        fi
-
-        # ── Build optional flags ─────────────────────────────────────────────
-        EXTRA_FLAGS=""
-
-        if [ -n "${SV_THRESHOLD}" ]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --threshold ${SV_THRESHOLD}"
-        fi
-
-        if [ -n "${SV_THRESHOLD_GRADE}" ]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --threshold-grade ${SV_THRESHOLD_GRADE}"
-        fi
-
-        if [ -n "${SV_SKIP}" ]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --skip ${SV_SKIP}"
-        fi
-
-        if [ -n "${SV_ONLY}" ]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --only ${SV_ONLY}"
-        fi
-
-        # ── Run the scanner ──────────────────────────────────────────────────
-        EXIT_CODE=0
-
-        if [ "${SV_USE_DOCKER}" = "true" ]; then
-          # Resolve source to an absolute path for Docker volume mount,
-          # falling back to the string as-is (URL case).
-          if [ -e "${SV_SOURCE}" ]; then
-            ABS_SOURCE="$(realpath "${SV_SOURCE}")"
-            DOCKER_SOURCE="/scan-src"
-            VOLUME_FLAGS="-v ${ABS_SOURCE}:${DOCKER_SOURCE}:ro"
-          else
-            # Remote URL – no volume needed
-            DOCKER_SOURCE="${SV_SOURCE}"
-            VOLUME_FLAGS=""
+        exit_code=0
+        if [[ "$SV_USE_DOCKER" == 'true' ]]; then
+          docker_args=(run --rm)
+          docker_source="$SV_SOURCE"
+          if [[ -e "$SV_SOURCE" ]]; then
+            absolute_source="$(realpath "$SV_SOURCE")"
+            docker_args+=(--volume "$absolute_source:/scan-source:ro")
+            docker_source=/scan-source
           fi
-
-          docker run --rm \
-            -v "${OUTPUT_DIR}:/reports" \
-            ${VOLUME_FLAGS} \
-            skills-verified:action \
-            "${DOCKER_SOURCE}" \
-            --output "/reports/report.json" \
-            --output-dir "/reports" \
-            --markdown-style "${SV_COMMENT_STYLE}" \
-            ${FORMAT_FLAGS} \
-            ${EXTRA_FLAGS} || EXIT_CODE=$?
+          docker_args+=(skills-verified:action "${analyzer_args[@]}" -- "$docker_source")
+          docker "${docker_args[@]}" > "$report_path" || exit_code=$?
         else
-          skills-verified "${SV_SOURCE}" \
-            --output "${REPORT_JSON}" \
-            --output-dir "${OUTPUT_DIR}" \
-            --markdown-style "${SV_COMMENT_STYLE}" \
-            ${FORMAT_FLAGS} \
-            ${EXTRA_FLAGS} || EXIT_CODE=$?
+          skills-verified "${analyzer_args[@]}" -- "$SV_SOURCE" > "$report_path" || exit_code=$?
         fi
 
-        # ── Parse score / grade from report.json ─────────────────────────────
-        if [ -f "${REPORT_JSON}" ]; then
-          SCORE=$(python3 -c "import json,sys; d=json.load(open('${REPORT_JSON}')); print(d.get('overall_score', ''))")
-          GRADE=$(python3 -c "import json,sys; d=json.load(open('${REPORT_JSON}')); print(d.get('overall_grade', ''))")
+        echo "report-path=$report_path" >> "$GITHUB_OUTPUT"
+        if [[ -s "$report_path" ]]; then
+          python - "$report_path" "$GITHUB_OUTPUT" <<'PY'
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as report_file:
+            report = json.load(report_file)
+        with open(sys.argv[2], "a", encoding="utf-8") as github_output:
+            print(f'scan-status={report["scan"]["status"]}', file=github_output)
+            print(f'findings-count={len(report["findings"])}', file=github_output)
+        PY
         else
-          SCORE=""
-          GRADE=""
+          echo 'scan-status=' >> "$GITHUB_OUTPUT"
+          echo 'findings-count=' >> "$GITHUB_OUTPUT"
+          if [[ "$exit_code" -eq 0 ]]; then
+            echo 'skills-verified produced no JSON report' >&2
+            exit_code=2
+          fi
         fi
 
-        echo "score=${SCORE}" >> "$GITHUB_OUTPUT"
-        echo "grade=${GRADE}" >> "$GITHUB_OUTPUT"
-        echo "report-path=${REPORT_JSON}" >> "$GITHUB_OUTPUT"
-
-        # ── Write passed output ───────────────────────────────────────────────
-        if [ "${EXIT_CODE}" -eq 0 ]; then
-          echo "passed=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "passed=false" >> "$GITHUB_OUTPUT"
-        fi
-
-        # ── Write Job Summary ────────────────────────────────────────────────
-        REPORT_MD="${OUTPUT_DIR}/report.md"
-        if [ -f "${REPORT_MD}" ]; then
-          cat "${REPORT_MD}" >> "$GITHUB_STEP_SUMMARY"
-        fi
-
-        # Propagate threshold failures (exit 1) but not scanner errors (exit 2)
-        # so CI surfaces a clear failure rather than a silent error.
-        exit ${EXIT_CODE}
-
-    # ── 5. Comment on PR ─────────────────────────────────────────────────────
-    - name: Comment on PR
-      if: always() && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        REPORT_MD="${{ runner.temp }}/skills-verified-output/report.md"
-        if [ -f "${REPORT_MD}" ]; then
-          gh pr comment "${{ github.event.pull_request.number }}" \
-            --body-file "${REPORT_MD}" \
-            --repo "${{ github.repository }}"
-        fi
-
-    # ── 6. Upload artifacts ───────────────────────────────────────────────────
-    - name: Upload scan artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: skills-verified-report
-        path: ${{ runner.temp }}/skills-verified-output/
-        if-no-files-found: warn
+        exit "$exit_code"

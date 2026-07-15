@@ -2,22 +2,27 @@ import json
 import re
 from pathlib import Path
 
-import yaml
-
+from skills_verified.platforms.agent_skills import manifests_under, parse_skill_metadata
 from skills_verified.platforms.base import (
     ConfigFile,
     MCPToolDefinition,
     PlatformProfile,
     SkillMetadata,
 )
+from skills_verified.repo.files import (
+    RepositoryLimitError,
+    UnsafeRepositoryPath,
+    safe_read_text,
+)
 
-_DETECTION_MARKERS = [
-    "SKILL.md",
-    ".skills",
+_DETECTION_MARKERS = (
     ".claude/settings.json",
+    ".claude/settings.local.json",
     ".claude/config.json",
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
     "CLAUDE.md",
-]
+)
 
 _TOOL_DECORATOR_RE = re.compile(
     r"""@server\.(call_tool|tool)\s*\("""
@@ -33,38 +38,56 @@ class ClaudeCodeProfile(PlatformProfile):
     # ------------------------------------------------------------------
 
     def detect(self, repo_path: Path) -> bool:
-        for marker in _DETECTION_MARKERS:
-            if (repo_path / marker).exists():
-                return True
-        return False
+        return bool(self.get_detection_evidence(repo_path))
+
+    def get_detection_evidence(self, repo_path: Path) -> list[Path]:
+        root = repo_path.resolve()
+        evidence = [
+            Path(marker) for marker in _DETECTION_MARKERS if (root / marker).is_file()
+        ]
+        evidence.extend(
+            path.relative_to(root)
+            for path in manifests_under(root, (".claude", "skills"))
+        )
+        return sorted(set(evidence), key=Path.as_posix)
 
     # ------------------------------------------------------------------
     # config files
     # ------------------------------------------------------------------
 
     def get_config_files(self, repo_path: Path) -> list[ConfigFile]:
+        root = repo_path.resolve()
         configs: list[ConfigFile] = []
 
-        # .claude/settings.json
-        settings = repo_path / ".claude" / "settings.json"
-        self._try_load_json(settings, repo_path, "settings", configs)
+        for relative_path in (
+            ".claude/settings.json",
+            ".claude/settings.local.json",
+            ".claude/config.json",
+            ".mcp.json",
+        ):
+            self._try_load_json(root / relative_path, root, "settings", configs)
 
-        # .claude/config.json
-        config = repo_path / ".claude" / "config.json"
-        self._try_load_json(config, repo_path, "settings", configs)
+        self._try_load_json(
+            root / ".claude-plugin" / "plugin.json",
+            root,
+            "manifest",
+            configs,
+        )
 
         # CLAUDE.md
-        claude_md = repo_path / "CLAUDE.md"
+        claude_md = root / "CLAUDE.md"
         if claude_md.is_file():
             try:
-                text = claude_md.read_text(errors="ignore")
-                configs.append(ConfigFile(
-                    path=claude_md.relative_to(repo_path),
-                    platform=self.name,
-                    config_type="rules",
-                    content=text,
-                ))
-            except OSError:
+                text = safe_read_text(claude_md, root)
+                configs.append(
+                    ConfigFile(
+                        path=claude_md.relative_to(root),
+                        platform=self.name,
+                        config_type="rules",
+                        content=text,
+                    )
+                )
+            except (RepositoryLimitError, UnsafeRepositoryPath):
                 pass
 
         return configs
@@ -74,64 +97,75 @@ class ClaudeCodeProfile(PlatformProfile):
     # ------------------------------------------------------------------
 
     def get_skill_metadata(self, repo_path: Path) -> SkillMetadata | None:
-        skill_md = repo_path / "SKILL.md"
-        if not skill_md.is_file():
-            return None
+        metadata = self.get_skill_metadata_all(repo_path)
+        return metadata[0] if metadata else None
 
-        try:
-            text = skill_md.read_text(errors="ignore")
-        except OSError:
-            return None
+    def get_skill_metadata_all(self, repo_path: Path) -> list[SkillMetadata]:
+        root = repo_path.resolve()
+        return [
+            parse_skill_metadata(root, manifest, platform=self.name)
+            for manifest in manifests_under(root, (".claude", "skills"))
+        ]
 
-        frontmatter = self._parse_frontmatter(text)
-        if frontmatter is None:
-            return None
-
-        permissions = frontmatter.get("permissions", [])
-        if isinstance(permissions, str):
-            permissions = [permissions]
-
-        entry_points_raw = frontmatter.get("entry_points", [])
-        if isinstance(entry_points_raw, str):
-            entry_points_raw = [entry_points_raw]
-
-        return SkillMetadata(
-            name=frontmatter.get("name"),
-            description=frontmatter.get("description"),
-            author=frontmatter.get("author"),
-            permissions_declared=list(permissions),
-            entry_points=[Path(e) for e in entry_points_raw],
-            platform=self.name,
-        )
+    def discover_skill_roots(self, repo_path: Path) -> list[Path]:
+        root = repo_path.resolve()
+        return [
+            manifest.relative_to(root).parent
+            for manifest in manifests_under(root, (".claude", "skills"))
+        ]
 
     # ------------------------------------------------------------------
     # MCP definitions
     # ------------------------------------------------------------------
 
     def get_mcp_definitions(self, repo_path: Path) -> list[MCPToolDefinition]:
+        root = repo_path.resolve()
         definitions: list[MCPToolDefinition] = []
 
-        # From .claude/settings.json → mcpServers
-        settings_path = repo_path / ".claude" / "settings.json"
-        if settings_path.is_file():
+        # From Claude settings and the team-shared .mcp.json file.
+        for settings_path in (
+            root / ".claude" / "settings.json",
+            root / ".mcp.json",
+        ):
+            if not settings_path.is_file():
+                continue
             try:
-                data = json.loads(settings_path.read_text(errors="ignore"))
-                servers = data.get("mcpServers", {})
-                for server_name, server_cfg in servers.items():
-                    if not isinstance(server_cfg, dict):
-                        continue
-                    definitions.append(MCPToolDefinition(
+                text = safe_read_text(settings_path, root)
+            except (RepositoryLimitError, UnsafeRepositoryPath) as exc:
+                self._record_read_error(settings_path.relative_to(root), exc)
+                continue
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError as exc:
+                self._record_parse_error(settings_path.relative_to(root), exc)
+                continue
+            if not isinstance(data, dict):
+                self._record_schema_error(
+                    settings_path.relative_to(root),
+                    "Claude settings root must be an object",
+                )
+                continue
+            servers = data.get("mcpServers", {})
+            if not isinstance(servers, dict):
+                self._record_schema_error(
+                    settings_path.relative_to(root), "mcpServers must be an object"
+                )
+                continue
+            for server_name, server_cfg in servers.items():
+                if not isinstance(server_cfg, dict):
+                    continue
+                definitions.append(
+                    MCPToolDefinition(
                         name=server_name,
                         description=server_cfg.get("description", ""),
                         input_schema=server_cfg.get("inputSchema", {}),
-                        source_file=settings_path.relative_to(repo_path),
+                        source_file=settings_path.relative_to(root),
                         raw_definition=server_cfg,
-                    ))
-            except (OSError, json.JSONDecodeError):
-                pass
+                    )
+                )
 
         # Scan Python files for tool decorators
-        definitions.extend(self._scan_python_tools(repo_path))
+        definitions.extend(self._scan_python_tools(root))
 
         return definitions
 
@@ -149,38 +183,28 @@ class ClaudeCodeProfile(PlatformProfile):
         if not path.is_file():
             return
         try:
-            data = json.loads(path.read_text(errors="ignore"))
-            out.append(ConfigFile(
+            text = safe_read_text(path, repo_path)
+        except (RepositoryLimitError, UnsafeRepositoryPath) as exc:
+            self._record_read_error(path.relative_to(repo_path), exc)
+            return
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            self._record_parse_error(path.relative_to(repo_path), exc)
+            return
+        if not isinstance(data, dict):
+            self._record_schema_error(
+                path.relative_to(repo_path), "Configuration root must be an object"
+            )
+            return
+        out.append(
+            ConfigFile(
                 path=path.relative_to(repo_path),
                 platform=self.name,
                 config_type=config_type,
                 content=data,
-            ))
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    @staticmethod
-    def _parse_frontmatter(text: str) -> dict | None:
-        """Parse YAML frontmatter between the first two ``---`` lines."""
-        lines = text.splitlines(keepends=True)
-        if not lines or lines[0].strip() != "---":
-            return None
-
-        end_idx = None
-        for idx, line in enumerate(lines[1:], start=1):
-            if line.strip() == "---":
-                end_idx = idx
-                break
-
-        if end_idx is None:
-            return None
-
-        yaml_block = "".join(lines[1:end_idx])
-        try:
-            parsed = yaml.safe_load(yaml_block)
-            return parsed if isinstance(parsed, dict) else None
-        except yaml.YAMLError:
-            return None
+            )
+        )
 
     def _scan_python_tools(self, repo_path: Path) -> list[MCPToolDefinition]:
         """Scan .py files for ``@server.call_tool`` / ``server.tool()`` patterns."""
@@ -189,20 +213,22 @@ class ClaudeCodeProfile(PlatformProfile):
             if not py_file.is_file():
                 continue
             try:
-                content = py_file.read_text(errors="ignore")
-            except OSError:
+                content = safe_read_text(py_file, repo_path)
+            except (RepositoryLimitError, UnsafeRepositoryPath):
                 continue
 
             for match in _TOOL_DECORATOR_RE.finditer(content):
                 # Try to extract the function name on the next def line
-                rest = content[match.end():]
+                rest = content[match.end() :]
                 func_name = self._extract_func_name(rest)
-                definitions.append(MCPToolDefinition(
-                    name=func_name or "unknown",
-                    description="",
-                    input_schema={},
-                    source_file=py_file.relative_to(repo_path),
-                ))
+                definitions.append(
+                    MCPToolDefinition(
+                        name=func_name or "unknown",
+                        description="",
+                        input_schema={},
+                        source_file=py_file.relative_to(repo_path),
+                    )
+                )
         return definitions
 
     @staticmethod
@@ -210,7 +236,7 @@ class ClaudeCodeProfile(PlatformProfile):
         """Find the first ``def <name>`` after a decorator match."""
         for line in text_after_decorator.splitlines():
             stripped = line.strip()
-            m = re.match(r"def\s+(\w+)\s*\(", stripped)
+            m = re.match(r"(?:async\s+)?def\s+(\w+)\s*\(", stripped)
             if m:
                 return m.group(1)
             # Stop searching if we hit another decorator or class

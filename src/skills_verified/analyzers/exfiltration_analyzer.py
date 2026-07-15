@@ -2,54 +2,30 @@ import logging
 import re
 from pathlib import Path
 
+from skills_verified.analyzers.behavioral_analyzer import analyze_sensitive_flows
+from skills_verified.analyzers.shell_utils import detect_shell_dialect
 from skills_verified.core.analyzer import Analyzer
-from skills_verified.core.models import Category, Finding, Severity
+from skills_verified.core.context import iter_analysis_files
+from skills_verified.core.models import (
+    Category,
+    Diagnostic,
+    Evidence,
+    Finding,
+    Severity,
+)
+from skills_verified.core.python_ast import parse_python
 from skills_verified.data.loader import SignatureLoader
 
 logger = logging.getLogger(__name__)
 
 SCAN_EXTENSIONS = {".py", ".js", ".ts", ".rb", ".sh"}
 
-BUILTIN_PATTERNS = [
-    {
-        "title": "DNS exfiltration via f-string subdomain",
-        "pattern": re.compile(r"""f["'].*\{.*\}.*\.\w{2,6}["']"""),
-        "severity": Severity.HIGH,
-        "description": "Data embedded into a DNS-style domain string via f-string, suggesting DNS exfiltration.",
-    },
-    {
-        "title": "Environment variable bulk harvesting (Python)",
-        "pattern": re.compile(r"os\.environ\.copy\s*\(\)|dict\s*\(\s*os\.environ\s*\)"),
-        "severity": Severity.MEDIUM,
-        "description": "Bulk copy of environment variables, often the first step in credential exfiltration.",
-    },
-    {
-        "title": "Environment variable bulk harvesting (Node.js)",
-        "pattern": re.compile(r"Object\.keys\s*\(\s*process\.env\s*\)"),
-        "severity": Severity.MEDIUM,
-        "description": "Bulk access to process.env in Node.js, collecting all environment variables.",
-    },
-    {
-        "title": "Credential file read",
-        "pattern": re.compile(
-            r"open\s*\(.*\.(ssh|aws|npmrc|gitconfig|env)"
-        ),
-        "severity": Severity.HIGH,
-        "description": "Reading well-known credential files such as SSH keys, AWS credentials, or git configuration.",
-    },
-    {
-        "title": "curl/wget with data upload",
-        "pattern": re.compile(r"curl\s+.*-d\s+@|wget\s+.*--post-file"),
-        "severity": Severity.HIGH,
-        "description": "curl or wget used to upload file content to a remote server.",
-    },
-]
-
 
 class ExfiltrationAnalyzer(Analyzer):
     name = "exfiltration"
 
     def __init__(self) -> None:
+        self.diagnostics: list[Diagnostic] = []
         self._yaml_patterns: list[dict] = []
         loader = SignatureLoader()
         sigs = loader.load_signatures("exfiltration_patterns.yaml")
@@ -76,31 +52,46 @@ class ExfiltrationAnalyzer(Analyzer):
         return True
 
     def analyze(self, repo_path: Path, **kwargs) -> list[Finding]:
+        self.diagnostics = []
         findings: list[Finding] = []
-        for file_path in repo_path.rglob("*"):
-            if not file_path.is_file():
-                continue
-            if file_path.suffix not in SCAN_EXTENSIONS:
-                continue
-            try:
-                content = file_path.read_text(errors="ignore")
-            except OSError:
+        for file_path in iter_analysis_files(repo_path, kwargs.get("context")):
+            if (
+                file_path.suffix not in SCAN_EXTENSIONS
+                and detect_shell_dialect(file_path) is None
+            ):
                 continue
             rel_path = str(file_path.relative_to(repo_path))
-            for line_number, line in enumerate(content.splitlines(), start=1):
-                for pat in BUILTIN_PATTERNS:
-                    if pat["pattern"].search(line):
-                        findings.append(
-                            Finding(
-                                title=pat["title"],
-                                description=pat["description"],
-                                severity=pat["severity"],
-                                category=Category.EXFILTRATION,
-                                file_path=rel_path,
-                                line_number=line_number,
-                                analyzer=self.name,
-                            )
+            try:
+                content = file_path.read_text(errors="ignore")
+            except OSError as exc:
+                self._diagnostic(
+                    "source_read_error",
+                    f"Could not read source file: {type(exc).__name__}",
+                    rel_path,
+                )
+                continue
+            if file_path.suffix == ".py":
+                try:
+                    parse_python(content)
+                except SyntaxError as exc:
+                    location = f" at line {exc.lineno}" if exc.lineno else ""
+                    self._diagnostic(
+                        "python_parse_error",
+                        f"Could not parse Python source{location}: {exc.msg}",
+                        rel_path,
+                        details={"line": exc.lineno, "offset": exc.offset},
+                    )
+                else:
+                    findings.extend(
+                        analyze_sensitive_flows(
+                            content,
+                            rel_path,
+                            self.name,
+                            category=Category.EXFILTRATION,
+                            network_only=True,
                         )
+                    )
+            for line_number, line in enumerate(content.splitlines(), start=1):
                 for pat in self._yaml_patterns:
                     if pat["pattern"].search(line):
                         findings.append(
@@ -112,6 +103,29 @@ class ExfiltrationAnalyzer(Analyzer):
                                 file_path=rel_path,
                                 line_number=line_number,
                                 analyzer=self.name,
+                                rule_id=pat["id"],
+                                evidence=Evidence(
+                                    kind="source",
+                                    snippet=line.strip()[:500],
+                                ),
                             )
                         )
         return findings
+
+    def _diagnostic(
+        self,
+        code: str,
+        message: str,
+        path: str,
+        *,
+        details: dict | None = None,
+    ) -> None:
+        self.diagnostics.append(
+            Diagnostic(
+                code=code,
+                message=message,
+                analyzer=self.name,
+                path=path,
+                details=details or {},
+            )
+        )

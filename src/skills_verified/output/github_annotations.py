@@ -6,7 +6,16 @@ _SEVERITY_LEVEL = {
     Severity.MEDIUM: "warning",
     Severity.LOW: "warning",
     Severity.INFO: "notice",
+    Severity.UNKNOWN: "notice",
 }
+
+
+def _escape_data(value: str) -> str:
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(value: str) -> str:
+    return _escape_data(value).replace(":", "%3A").replace(",", "%2C")
 
 
 def format_annotations(findings: list[Finding]) -> list[str]:
@@ -17,13 +26,13 @@ def format_annotations(findings: list[Finding]) -> list[str]:
 
         params: list[str] = []
         if finding.file_path is not None:
-            params.append(f"file={finding.file_path}")
+            params.append(f"file={_escape_property(finding.file_path)}")
             if finding.line_number is not None:
                 params.append(f"line={finding.line_number}")
-        params.append(f"title={finding.title}")
+        params.append(f"title={_escape_property(finding.title)}")
 
         params_str = ",".join(params)
-        line = f"::{level} {params_str}::{finding.description}"
+        line = f"::{level} {params_str}::{_escape_data(finding.description)}"
         lines.append(line)
     return lines
 

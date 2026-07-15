@@ -4,28 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: skills-verified:latest
-    container_name: skills-verified
     volumes:
-      - ./workspace:/workspace
+      - ./workspace:/workspace:ro
       - ./reports:/reports
-    environment:
-      - SV_LLM_URL=${SV_LLM_URL:-}
-      - SV_LLM_MODEL=${SV_LLM_MODEL:-}
-      - SV_LLM_KEY=${SV_LLM_KEY:-}
-    command: ["--help"]
-
-  scan-url:
-    extends: skills-verified
-    container_name: skills-verified-url
     command:
-      - "${REPO_URL:-https://github.com/Nikolay-Shirokov/cc-1c-skills}"
-      - "--output"
-      - "/reports/report.json"
-
-  scan-local:
-    extends: skills-verified
-    container_name: skills-verified-local
-    command:
-      - "/workspace"
-      - "--output"
-      - "/reports/report.json"
+      - /workspace
+      - --output
+      - /reports/report.json

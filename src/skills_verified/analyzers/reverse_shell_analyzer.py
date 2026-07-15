@@ -2,63 +2,24 @@ import logging
 import re
 from pathlib import Path
 
+from skills_verified.analyzers.shell_utils import detect_shell_dialect
 from skills_verified.core.analyzer import Analyzer
-from skills_verified.core.models import Category, Finding, Severity
+from skills_verified.core.context import iter_analysis_files
+from skills_verified.core.models import Category, Diagnostic, Finding, Severity
 from skills_verified.data.loader import SignatureLoader
 
 logger = logging.getLogger(__name__)
 
 SCAN_EXTENSIONS = {".py", ".js", ".ts", ".rb", ".sh", ".ps1", ".pl", ".php"}
 
-# Line-level patterns matched per line
-BUILTIN_LINE_PATTERNS = [
-    {
-        "title": "Bash TCP reverse shell",
-        "pattern": re.compile(r"bash\s+-i\s+>&\s*/dev/tcp/"),
-        "severity": Severity.CRITICAL,
-        "description": "Bash reverse shell using /dev/tcp to connect back to an attacker-controlled host.",
-    },
-    {
-        "title": "Netcat reverse shell with -e flag",
-        "pattern": re.compile(r"\bnc\b.*\s-e\s+/bin/(sh|bash)"),
-        "severity": Severity.CRITICAL,
-        "description": "Netcat used with -e to pipe a shell to a remote host.",
-    },
-    {
-        "title": "Python pty.spawn shell",
-        "pattern": re.compile(r"pty\.spawn\s*\("),
-        "severity": Severity.CRITICAL,
-        "description": "Python pty.spawn used to spawn an interactive shell, often part of a reverse shell chain.",
-    },
-    {
-        "title": "PowerShell TCPClient reverse shell",
-        "pattern": re.compile(r"New-Object\s+System\.Net\.Sockets\.TCPClient"),
-        "severity": Severity.CRITICAL,
-        "description": "PowerShell TCPClient used to connect to a remote host for shell access.",
-    },
-    {
-        "title": "PowerShell Invoke-Expression with DownloadString",
-        "pattern": re.compile(
-            r"(IEX|Invoke-Expression).*\.(DownloadString|DownloadData)\s*\(",
-            re.IGNORECASE,
-        ),
-        "severity": Severity.CRITICAL,
-        "description": "PowerShell downloading and immediately executing remote code.",
-    },
-    {
-        "title": "Socat reverse shell",
-        "pattern": re.compile(r"socat\s+.*exec:", re.IGNORECASE),
-        "severity": Severity.CRITICAL,
-        "description": "Socat used to forward a shell to a remote host via TCP.",
-    },
-]
-
 # File-level patterns matched against the entire file content (multiline awareness)
 BUILTIN_FILE_PATTERNS = [
     {
         "title": "Python socket + subprocess reverse shell",
         "pattern": re.compile(
-            r"socket\.socket.*subprocess|subprocess.*socket\.socket",
+            r"\.connect\s*\([^)]*\)[\s\S]{0,2000}?"
+            r"subprocess\.(?:call|run|Popen)\s*\([\s\S]{0,1000}?"
+            r"(?:stdin|stdout|stderr)\s*=\s*\w+\.fileno\s*\(",
             re.DOTALL,
         ),
         "severity": Severity.CRITICAL,
@@ -71,6 +32,7 @@ class ReverseShellAnalyzer(Analyzer):
     name = "reverse_shell"
 
     def __init__(self) -> None:
+        self.diagnostics: list[Diagnostic] = []
         self._yaml_patterns: list[dict] = []
         loader = SignatureLoader()
         sigs = loader.load_signatures("reverse_shell_signatures.yaml")
@@ -97,33 +59,30 @@ class ReverseShellAnalyzer(Analyzer):
         return True
 
     def analyze(self, repo_path: Path, **kwargs) -> list[Finding]:
+        self.diagnostics = []
         findings: list[Finding] = []
-        for file_path in repo_path.rglob("*"):
-            if not file_path.is_file():
-                continue
-            if file_path.suffix not in SCAN_EXTENSIONS:
-                continue
-            try:
-                content = file_path.read_text(errors="ignore")
-            except OSError:
+        for file_path in iter_analysis_files(repo_path, kwargs.get("context")):
+            if (
+                file_path.suffix not in SCAN_EXTENSIONS
+                and detect_shell_dialect(file_path) is None
+            ):
                 continue
             rel_path = str(file_path.relative_to(repo_path))
+            try:
+                content = file_path.read_text(errors="ignore")
+            except OSError as exc:
+                self.diagnostics.append(
+                    Diagnostic(
+                        code="source_read_error",
+                        message=f"Could not read source file: {type(exc).__name__}",
+                        analyzer=self.name,
+                        path=rel_path,
+                    )
+                )
+                continue
 
             # Line-level scanning (built-in + YAML)
             for line_number, line in enumerate(content.splitlines(), start=1):
-                for pat in BUILTIN_LINE_PATTERNS:
-                    if pat["pattern"].search(line):
-                        findings.append(
-                            Finding(
-                                title=pat["title"],
-                                description=pat["description"],
-                                severity=pat["severity"],
-                                category=Category.CODE_SAFETY,
-                                file_path=rel_path,
-                                line_number=line_number,
-                                analyzer=self.name,
-                            )
-                        )
                 for pat in self._yaml_patterns:
                     if pat["pattern"].search(line):
                         findings.append(
@@ -135,12 +94,14 @@ class ReverseShellAnalyzer(Analyzer):
                                 file_path=rel_path,
                                 line_number=line_number,
                                 analyzer=self.name,
+                                rule_id=pat["id"],
                             )
                         )
 
             # File-level scanning for multiline patterns
             for pat in BUILTIN_FILE_PATTERNS:
-                if pat["pattern"].search(content):
+                match = pat["pattern"].search(content)
+                if match:
                     findings.append(
                         Finding(
                             title=pat["title"],
@@ -148,8 +109,9 @@ class ReverseShellAnalyzer(Analyzer):
                             severity=pat["severity"],
                             category=Category.CODE_SAFETY,
                             file_path=rel_path,
-                            line_number=None,
+                            line_number=content.count("\n", 0, match.start()) + 1,
                             analyzer=self.name,
+                            rule_id="SV-REVERSE-SHELL-PYTHON-SOCKET",
                         )
                     )
         return findings

@@ -15,6 +15,7 @@ htmlcov/
 !tests/fixtures/fake_repo/.claude
 .DS_Store
 .env
+.idea/
 workspace/*
 !workspace/.gitkeep
 reports/*

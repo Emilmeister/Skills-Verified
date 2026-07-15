@@ -1,137 +1,167 @@
+"""Detection for current OpenClaw skills, configuration, and plugins."""
+
+from __future__ import annotations
+
 import json
-import re
 from pathlib import Path
 
+from skills_verified.platforms.agent_skills import (
+    discover_skill_manifests,
+    parse_skill_metadata,
+)
 from skills_verified.platforms.base import (
     ConfigFile,
     MCPToolDefinition,
     PlatformProfile,
     SkillMetadata,
 )
+from skills_verified.repo.files import (
+    RepositoryLimitError,
+    UnsafeRepositoryPath,
+    safe_read_text,
+)
 
-_REGISTER_TYPE_RE = re.compile(r"""RED\.nodes\.registerType\s*\(\s*['"]([^'"]+)['"]""")
+_OPENCLAW_METADATA_KEYS = {"openclaw", "clawdbot", "clawdis"}
 
 
 class OpenClawProfile(PlatformProfile):
     name = "openclaw"
 
-    # ------------------------------------------------------------------
-    # detection
-    # ------------------------------------------------------------------
-
     def detect(self, repo_path: Path) -> bool:
-        dir_markers = ["flows", "nodes", ".openclaw"]
-        for marker in dir_markers:
-            if (repo_path / marker).exists():
-                return True
+        return bool(self.get_detection_evidence(repo_path))
 
-        pkg_json = repo_path / "package.json"
-        if pkg_json.is_file():
-            try:
-                text = pkg_json.read_text(errors="ignore")
-                if "node-red" in text:
-                    return True
-            except OSError:
-                pass
-
-        return False
-
-    # ------------------------------------------------------------------
-    # config files
-    # ------------------------------------------------------------------
-
-    def get_config_files(self, repo_path: Path) -> list[ConfigFile]:
-        configs: list[ConfigFile] = []
-
-        # .openclaw/*.json
-        openclaw_dir = repo_path / ".openclaw"
-        if openclaw_dir.is_dir():
-            for json_file in sorted(openclaw_dir.glob("*.json")):
-                self._try_load_json(json_file, repo_path, "settings", configs)
-
-        # flows/*.json
-        flows_dir = repo_path / "flows"
-        if flows_dir.is_dir():
-            for json_file in sorted(flows_dir.glob("*.json")):
-                self._try_load_json(json_file, repo_path, "manifest", configs)
-
-        return configs
-
-    # ------------------------------------------------------------------
-    # skill metadata
-    # ------------------------------------------------------------------
-
-    def get_skill_metadata(self, repo_path: Path) -> SkillMetadata | None:
-        pkg_json = repo_path / "package.json"
-        if not pkg_json.is_file():
-            return None
-
-        try:
-            data = json.loads(pkg_json.read_text(errors="ignore"))
-        except (OSError, json.JSONDecodeError):
-            return None
-
-        if not isinstance(data, dict):
-            return None
-
-        return SkillMetadata(
-            name=data.get("name"),
-            description=data.get("description"),
-            author=data.get("author"),
-            permissions_declared=[],
-            entry_points=[],
-            platform=self.name,
+    def get_detection_evidence(self, repo_path: Path) -> list[Path]:
+        root = repo_path.resolve()
+        evidence: list[Path] = []
+        for marker in ("openclaw.plugin.json", ".openclaw/openclaw.json"):
+            if (root / marker).is_file():
+                evidence.append(Path(marker))
+        evidence.extend(
+            metadata.manifest_path for metadata in self.get_skill_metadata_all(root)
+        )
+        return sorted(
+            {path for path in evidence if path is not None}, key=Path.as_posix
         )
 
-    # ------------------------------------------------------------------
-    # MCP definitions
-    # ------------------------------------------------------------------
-
-    def get_mcp_definitions(self, repo_path: Path) -> list[MCPToolDefinition]:
-        definitions: list[MCPToolDefinition] = []
-
-        nodes_dir = repo_path / "nodes"
-        if not nodes_dir.is_dir():
-            return definitions
-
-        for js_file in sorted(nodes_dir.rglob("*.js")):
-            if not js_file.is_file():
+    def get_config_files(self, repo_path: Path) -> list[ConfigFile]:
+        root = repo_path.resolve()
+        configs: list[ConfigFile] = []
+        for relative_path, config_type in (
+            (Path("openclaw.plugin.json"), "manifest"),
+            (Path(".openclaw/openclaw.json"), "settings"),
+        ):
+            path = root / relative_path
+            if not path.is_file():
                 continue
             try:
-                content = js_file.read_text(errors="ignore")
+                text = safe_read_text(path, root)
+            except (RepositoryLimitError, UnsafeRepositoryPath) as exc:
+                self._record_read_error(relative_path, exc)
+                continue
+            try:
+                content: dict | str = json.loads(text)
+            except json.JSONDecodeError as exc:
+                content = text
+                if relative_path == Path("openclaw.plugin.json"):
+                    self._record_parse_error(relative_path, exc)
+                else:
+                    # OpenClaw accepts JSON5. Preserve the raw config, but make
+                    # the missing semantic parse explicit to report consumers.
+                    self._add_diagnostic(
+                        "platform_config_parse_deferred",
+                        "OpenClaw JSON5 configuration was preserved but not parsed",
+                        relative_path,
+                        details={"format": "json5", "reason": "parser_unavailable"},
+                    )
+            if not isinstance(content, (dict, str)):
+                self._record_schema_error(
+                    relative_path, "OpenClaw configuration root must be an object"
+                )
+                continue
+            configs.append(
+                ConfigFile(
+                    path=relative_path,
+                    platform=self.name,
+                    config_type=config_type,
+                    content=content,
+                )
+            )
+        return configs
+
+    def get_skill_metadata(self, repo_path: Path) -> SkillMetadata | None:
+        metadata = self.get_skill_metadata_all(repo_path)
+        return metadata[0] if metadata else None
+
+    def get_skill_metadata_all(self, repo_path: Path) -> list[SkillMetadata]:
+        root = repo_path.resolve()
+        manifests = set(self._plugin_skill_manifests(root))
+
+        for manifest in discover_skill_manifests(root):
+            metadata = parse_skill_metadata(root, manifest, platform=self.name)
+            if _OPENCLAW_METADATA_KEYS.intersection(metadata.metadata):
+                manifests.add(manifest)
+
+        return [
+            parse_skill_metadata(root, manifest, platform=self.name)
+            for manifest in sorted(
+                manifests, key=lambda path: path.relative_to(root).as_posix()
+            )
+        ]
+
+    def discover_skill_roots(self, repo_path: Path) -> list[Path]:
+        return [
+            metadata.skill_root
+            for metadata in self.get_skill_metadata_all(repo_path)
+            if metadata.skill_root is not None
+        ]
+
+    def get_mcp_definitions(self, repo_path: Path) -> list[MCPToolDefinition]:
+        # OpenClaw plugin tools are runtime registrations, not Node-RED nodes or
+        # MCP definitions. The generic MCP profile handles actual MCP artifacts.
+        return []
+
+    def _plugin_skill_manifests(self, repo_path: Path) -> list[Path]:
+        root = repo_path.resolve()
+        manifest_path = root / "openclaw.plugin.json"
+        if not manifest_path.is_file():
+            return []
+        try:
+            text = safe_read_text(manifest_path, root)
+        except (RepositoryLimitError, UnsafeRepositoryPath) as exc:
+            self._record_read_error(manifest_path.relative_to(root), exc)
+            return []
+        try:
+            plugin = json.loads(text)
+        except json.JSONDecodeError as exc:
+            self._record_parse_error(manifest_path.relative_to(root), exc)
+            return []
+        if not isinstance(plugin, dict):
+            self._record_schema_error(
+                manifest_path.relative_to(root),
+                "OpenClaw plugin manifest root must be an object",
+            )
+            return []
+        skills = plugin.get("skills", [])
+        if not isinstance(skills, list):
+            self._record_schema_error(
+                manifest_path.relative_to(root), "skills must be an array"
+            )
+            return []
+
+        all_manifests = discover_skill_manifests(root)
+        declared_roots: list[Path] = []
+        for item in skills:
+            if not isinstance(item, str):
+                continue
+            try:
+                declared = (root / item).resolve(strict=True)
             except OSError:
                 continue
+            if declared.is_dir() and declared.is_relative_to(root):
+                declared_roots.append(declared)
 
-            for match in _REGISTER_TYPE_RE.finditer(content):
-                definitions.append(MCPToolDefinition(
-                    name=match.group(1),
-                    description="",
-                    input_schema={},
-                    source_file=js_file.relative_to(repo_path),
-                ))
-
-        return definitions
-
-    # ------------------------------------------------------------------
-    # helpers
-    # ------------------------------------------------------------------
-
-    def _try_load_json(
-        self,
-        path: Path,
-        repo_path: Path,
-        config_type: str,
-        out: list[ConfigFile],
-    ) -> None:
-        if not path.is_file():
-            return
-        try:
-            data = json.loads(path.read_text(errors="ignore"))
-            out.append(ConfigFile(
-                path=path.relative_to(repo_path),
-                platform=self.name,
-                config_type=config_type,
-                content=data,
-            ))
-        except (OSError, json.JSONDecodeError):
-            pass
+        return [
+            manifest
+            for manifest in all_manifests
+            if any(manifest.is_relative_to(declared) for declared in declared_roots)
+        ]

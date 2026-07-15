@@ -1,157 +1,49 @@
-# Skills Verified — GitLab CI Template
-# Usage:
-#   include:
-#     - remote: 'https://raw.githubusercontent.com/your-org/skills-verified/main/templates/gitlab-ci-skills-verified.yml'
-#   variables:
-#     SV_THRESHOLD: "70"
+# Include this file, then extend `.skills-verified`.
+# Pin SV_INSTALL_SPEC to a release tag or commit in production.
 
 variables:
-  SV_SOURCE: "."
-  SV_THRESHOLD: ""
-  SV_THRESHOLD_GRADE: ""
-  SV_SKIP: ""
-  SV_ONLY: ""
-  SV_USE_DOCKER: "false"
-  SV_COMMENT_ON_MR: "true"
-  SV_COMMENT_STYLE: "full"
-  SV_GENERATE_BADGE: "true"
+  SV_INSTALL_SPEC: git+https://github.com/Emilmeister/Skills-Verified.git@main
+  SV_SOURCE: .
+  SV_SKIP: ''
+  SV_ONLY: ''
 
-# ---------------------------------------------------------------------------
-# Hidden job: pip-based installation (Python 3.11 image)
-# ---------------------------------------------------------------------------
-.skills-verified-pip:
+.skills-verified:
   image: python:3.11
   stage: test
+  before_script:
+    - python -m pip install "$SV_INSTALL_SPEC" bandit semgrep
   script:
-    - pip install -e ".[dev]" bandit semgrep pip-audit
     - |
-      CMD="skills-verified ${SV_SOURCE} --output report.json --format codeclimate --format markdown"
+      python - <<'PY'
+      import json
+      import os
+      import subprocess
+      import sys
 
-      if [ -n "${SV_THRESHOLD}" ]; then
-        CMD="${CMD} --threshold ${SV_THRESHOLD}"
-      fi
+      command = ["skills-verified"]
+      for environment_name, option in (("SV_SKIP", "--skip"), ("SV_ONLY", "--only")):
+          value = os.environ.get(environment_name)
+          if value:
+              command.extend((option, value))
+      command.extend(("--", os.environ.get("SV_SOURCE", ".")))
 
-      if [ -n "${SV_THRESHOLD_GRADE}" ]; then
-        CMD="${CMD} --threshold-grade ${SV_THRESHOLD_GRADE}"
-      fi
+      with open("report.json", "w", encoding="utf-8") as report_file:
+          result = subprocess.run(command, stdout=report_file, check=False)
 
-      if [ -n "${SV_SKIP}" ]; then
-        CMD="${CMD} --skip ${SV_SKIP}"
-      fi
+      if not os.path.getsize("report.json"):
+          print("skills-verified produced no JSON report", file=sys.stderr)
+          sys.exit(result.returncode or 2)
 
-      if [ -n "${SV_ONLY}" ]; then
-        CMD="${CMD} --only ${SV_ONLY}"
-      fi
+      with open("report.json", encoding="utf-8") as report_file:
+          report = json.load(report_file)
+      print(json.dumps({
+          "status": report["scan"]["status"],
+          "findings": len(report["findings"]),
+          "analyzer_runs": report["analyzer_runs"],
+      }, indent=2))
 
-      if [ "${SV_GENERATE_BADGE}" = "true" ]; then
-        CMD="${CMD} --format badge"
-      fi
-
-      CMD="${CMD} --output-dir ."
-
-      if [ -n "${SV_COMMENT_STYLE}" ]; then
-        CMD="${CMD} --markdown-style ${SV_COMMENT_STYLE}"
-      fi
-
-      echo "Running: ${CMD}"
-      eval "${CMD}"
-      SCAN_EXIT_CODE=$?
-
-      if [ "${SV_COMMENT_ON_MR}" = "true" ] && [ -n "${CI_MERGE_REQUEST_IID}" ] && [ -f "report.md" ]; then
-        COMMENT_BODY=$(cat report.md)
-        curl --silent --fail \
-          --request POST \
-          --header "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-          --header "Content-Type: application/json" \
-          --data "{\"body\": $(echo "${COMMENT_BODY}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes" || true
-      fi
-
-      exit ${SCAN_EXIT_CODE}
+      sys.exit(result.returncode)
+      PY
   artifacts:
-    paths:
-      - report.json
-      - report.md
-      - badge.json
-    reports:
-      codequality: gl-code-quality-report.json
-    when: always
-
-# ---------------------------------------------------------------------------
-# Hidden job: Docker-based execution
-# ---------------------------------------------------------------------------
-.skills-verified-docker:
-  image: docker:latest
-  services:
-    - docker:dind
-  stage: test
-  script:
-    - apk add --no-cache curl python3
-    - docker build -t skills-verified:ci .
-    - |
-      CMD="${SV_SOURCE} --output /reports/report.json --format codeclimate --format markdown"
-
-      if [ -n "${SV_THRESHOLD}" ]; then
-        CMD="${CMD} --threshold ${SV_THRESHOLD}"
-      fi
-
-      if [ -n "${SV_THRESHOLD_GRADE}" ]; then
-        CMD="${CMD} --threshold-grade ${SV_THRESHOLD_GRADE}"
-      fi
-
-      if [ -n "${SV_SKIP}" ]; then
-        CMD="${CMD} --skip ${SV_SKIP}"
-      fi
-
-      if [ -n "${SV_ONLY}" ]; then
-        CMD="${CMD} --only ${SV_ONLY}"
-      fi
-
-      if [ "${SV_GENERATE_BADGE}" = "true" ]; then
-        CMD="${CMD} --format badge"
-      fi
-
-      CMD="${CMD} --output-dir /reports"
-
-      if [ -n "${SV_COMMENT_STYLE}" ]; then
-        CMD="${CMD} --markdown-style ${SV_COMMENT_STYLE}"
-      fi
-
-      mkdir -p reports
-      echo "Running docker: skills-verified ${CMD}"
-      docker run --rm \
-        --volume "$(pwd):/workspace:ro" \
-        --volume "$(pwd)/reports:/reports" \
-        skills-verified:ci \
-        /workspace ${CMD#${SV_SOURCE}}
-      SCAN_EXIT_CODE=$?
-
-      if [ -f "reports/report.json" ]; then
-        cp reports/report.json report.json
-      fi
-      if [ -f "reports/report.md" ]; then
-        cp reports/report.md report.md
-      fi
-      if [ -f "reports/badge.json" ]; then
-        cp reports/badge.json badge.json
-      fi
-
-      if [ "${SV_COMMENT_ON_MR}" = "true" ] && [ -n "${CI_MERGE_REQUEST_IID}" ] && [ -f "report.md" ]; then
-        COMMENT_BODY=$(cat report.md)
-        curl --silent --fail \
-          --request POST \
-          --header "PRIVATE-TOKEN: ${CI_JOB_TOKEN}" \
-          --header "Content-Type: application/json" \
-          --data "{\"body\": $(echo "${COMMENT_BODY}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes" || true
-      fi
-
-      exit ${SCAN_EXIT_CODE}
-  artifacts:
-    paths:
-      - report.json
-      - report.md
-      - badge.json
-    reports:
-      codequality: gl-code-quality-report.json
+    paths: [report.json]
     when: always

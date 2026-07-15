@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "scan": {
+    "status": "complete",
+    "started_at": "2026-07-13T12:00:00Z",
+    "duration_ms": 12,
+    "scanner": {
+      "name": "skills-verified",
+      "version": "0.2.0",
+      "ruleset_version": "2026.07.13"
+    }
+  },
+  "source": {
+    "input": "./example-skill",
+    "commit_sha": null,
+    "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "scope": {
+    "skill_roots": ["."],
+    "files_scanned": 1,
+    "files_skipped": 0,
+    "bytes_scanned": 64
+  },
+  "platforms": [
+    {
+      "name": "agent_skills",
+      "confidence": 1.0,
+      "evidence": ["SKILL.md"]
+    }
+  ],
+  "analyzer_runs": [
+    {
+      "name": "guardrails",
+      "status": "completed",
+      "duration_ms": 4,
+      "findings_count": 0,
+      "reason": null,
+      "version": "0.2.0"
+    }
+  ],
+  "findings": [],
+  "summary": {
+    "findings_total": 0,
+    "by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0,
+      "unknown": 0
+    }
+  },
+  "diagnostics": []
+}

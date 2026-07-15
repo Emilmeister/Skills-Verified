@@ -1,9 +1,17 @@
 from skills_verified.core.models import Category, Finding, Severity
-from skills_verified.output.github_annotations import format_annotations, print_annotations
+from skills_verified.output.github_annotations import (
+    format_annotations,
+    print_annotations,
+)
 
 
-def _make_finding(severity: Severity, title: str = "Test issue", description: str = "Test desc",
-                  file_path: str | None = None, line_number: int | None = None) -> Finding:
+def _make_finding(
+    severity: Severity,
+    title: str = "Test issue",
+    description: str = "Test desc",
+    file_path: str | None = None,
+    line_number: int | None = None,
+) -> Finding:
     return Finding(
         title=title,
         description=description,
@@ -50,6 +58,12 @@ def test_info_produces_notice():
     assert lines[0].startswith("::notice ")
 
 
+def test_unknown_produces_notice():
+    finding = _make_finding(Severity.UNKNOWN)
+    lines = format_annotations([finding])
+    assert lines[0].startswith("::notice ")
+
+
 def test_file_and_line_in_annotation():
     finding = _make_finding(Severity.HIGH, file_path="src/main.py", line_number=42)
     lines = format_annotations([finding])
@@ -67,6 +81,21 @@ def test_description_after_separator():
     finding = _make_finding(Severity.CRITICAL, description="Found leak")
     lines = format_annotations([finding])
     assert lines[0].endswith("::Found leak")
+
+
+def test_untrusted_workflow_command_fields_are_escaped():
+    finding = _make_finding(
+        Severity.HIGH,
+        title="bad:title,field\nnext",
+        description="line one\n::error::spoofed",
+        file_path="src/file,name.py",
+    )
+
+    line = format_annotations([finding])[0]
+
+    assert "title=bad%3Atitle%2Cfield%0Anext" in line
+    assert "file=src/file%2Cname.py" in line
+    assert line.endswith("::line one%0A::error::spoofed")
 
 
 def test_finding_without_file():

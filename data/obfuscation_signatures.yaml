@@ -1,5 +1,5 @@
-version: "1.0"
-updated: "2026-04-16"
+version: "1.1"
+updated: "2026-07-14"
 description: "Signatures for detecting code obfuscation techniques commonly used to hide malicious payloads."
 
 signatures:
@@ -49,13 +49,11 @@ signatures:
 
   - id: OB006
     title: "Unicode homoglyph in identifiers"
-    description: "Cyrillic or other non-ASCII characters used in identifiers that visually resemble Latin characters, enabling trojan source attacks."
+    description: "Latin and Cyrillic characters mixed within the same Python identifier, enabling trojan source attacks."
     pattern: "[\\u0400-\\u04FF]"
     severity: HIGH
     languages:
       - python
-      - javascript
-      - ruby
 
   - id: OB007
     title: "Nested eval/exec with compile"
@@ -92,16 +90,8 @@ signatures:
 
   - id: OB011
     title: "getattr/setattr obfuscation"
-    description: "getattr() or __import__() used with string manipulation to dynamically resolve dangerous functions."
+    description: "getattr() or setattr() reconstructs a dangerous function name from concatenated strings."
     pattern: "getattr\\s*\\(.*,\\s*[\"'].*[\"']\\s*\\)|__import__\\s*\\("
     severity: HIGH
     languages:
       - python
-
-  - id: OB012
-    title: "JavaScript Function constructor"
-    description: "new Function() or Function() used to construct executable code from strings, bypassing eval detection."
-    pattern: "(new\\s+)?Function\\s*\\(\\s*[\"']"
-    severity: HIGH
-    languages:
-      - javascript

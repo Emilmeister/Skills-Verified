@@ -1,8 +1,10 @@
 import re
 from pathlib import Path
 
+from skills_verified.analyzers.shell_utils import detect_shell_dialect
 from skills_verified.core.analyzer import Analyzer
-from skills_verified.core.models import Category, Finding, Severity
+from skills_verified.core.context import iter_analysis_files
+from skills_verified.core.models import Category, Diagnostic, Finding, Severity
 
 PERMISSION_PATTERNS = [
     {
@@ -73,31 +75,46 @@ SCAN_EXTENSIONS = {".py", ".js", ".mjs", ".ts", ".sh", ".bash", ".ps1"}
 class PermissionsAnalyzer(Analyzer):
     name = "permissions"
 
+    def __init__(self) -> None:
+        self.diagnostics: list[Diagnostic] = []
+
     def is_available(self) -> bool:
         return True
 
     def analyze(self, repo_path: Path, **kwargs) -> list[Finding]:
+        self.diagnostics = []
         findings: list[Finding] = []
-        for file_path in repo_path.rglob("*"):
-            if not file_path.is_file():
-                continue
-            if file_path.suffix not in SCAN_EXTENSIONS:
-                continue
-            try:
-                content = file_path.read_text(errors="ignore")
-            except OSError:
+        for file_path in iter_analysis_files(repo_path, kwargs.get("context")):
+            if (
+                file_path.suffix not in SCAN_EXTENSIONS
+                and detect_shell_dialect(file_path) is None
+            ):
                 continue
             rel_path = str(file_path.relative_to(repo_path))
+            try:
+                content = file_path.read_text(errors="ignore")
+            except OSError as exc:
+                self.diagnostics.append(
+                    Diagnostic(
+                        code="source_read_error",
+                        message=f"Could not read source file: {type(exc).__name__}",
+                        analyzer=self.name,
+                        path=rel_path,
+                    )
+                )
+                continue
             for line_number, line in enumerate(content.splitlines(), start=1):
                 for pat in PERMISSION_PATTERNS:
                     if pat["pattern"].search(line):
-                        findings.append(Finding(
-                            title=pat["title"],
-                            description=pat["description"],
-                            severity=pat["severity"],
-                            category=Category.PERMISSIONS,
-                            file_path=rel_path,
-                            line_number=line_number,
-                            analyzer=self.name,
-                        ))
+                        findings.append(
+                            Finding(
+                                title=pat["title"],
+                                description=pat["description"],
+                                severity=pat["severity"],
+                                category=Category.PERMISSIONS,
+                                file_path=rel_path,
+                                line_number=line_number,
+                                analyzer=self.name,
+                            )
+                        )
         return findings

@@ -1,7 +1,5 @@
-from pathlib import Path
-
 from skills_verified.analyzers.permissions_analyzer import PermissionsAnalyzer
-from skills_verified.core.models import Category, Severity
+from skills_verified.core.models import Category
 
 
 def test_is_available():
@@ -13,14 +11,26 @@ def test_is_available():
 def test_finds_file_operations(fake_repo_path):
     analyzer = PermissionsAnalyzer()
     findings = analyzer.analyze(fake_repo_path)
-    file_findings = [f for f in findings if "rmtree" in f.title.lower() or "delete" in f.title.lower() or "remove" in f.title.lower()]
+    file_findings = [
+        f
+        for f in findings
+        if "rmtree" in f.title.lower()
+        or "delete" in f.title.lower()
+        or "remove" in f.title.lower()
+    ]
     assert len(file_findings) >= 1
 
 
 def test_finds_process_operations(fake_repo_path):
     analyzer = PermissionsAnalyzer()
     findings = analyzer.analyze(fake_repo_path)
-    proc_findings = [f for f in findings if "kill" in f.title.lower() or "process" in f.title.lower() or "popen" in f.title.lower()]
+    proc_findings = [
+        f
+        for f in findings
+        if "kill" in f.title.lower()
+        or "process" in f.title.lower()
+        or "popen" in f.title.lower()
+    ]
     assert len(proc_findings) >= 1
 
 
@@ -34,7 +44,11 @@ def test_finds_network_operations(tmp_path):
     )
     analyzer = PermissionsAnalyzer()
     findings = analyzer.analyze(tmp_path)
-    net_findings = [f for f in findings if "network" in f.title.lower() or "socket" in f.title.lower()]
+    net_findings = [
+        f
+        for f in findings
+        if "network" in f.title.lower() or "socket" in f.title.lower()
+    ]
     assert len(net_findings) >= 1
 
 

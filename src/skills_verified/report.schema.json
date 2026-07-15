@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.skills-verified.dev/report/1.0.json",
+  "title": "Skills Verified Scan Report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "scan",
+    "source",
+    "scope",
+    "platforms",
+    "analyzer_runs",
+    "findings",
+    "summary",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scan": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "started_at", "duration_ms", "scanner"],
+      "properties": {
+        "status": {"enum": ["complete", "partial", "failed"]},
+        "started_at": {"type": "string", "format": "date-time"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "scanner": {
+          "type": "object",
+          "required": ["name", "version", "ruleset_version"],
+          "properties": {
+            "name": {"type": "string"},
+            "version": {"type": "string"},
+            "ruleset_version": {"type": "string"}
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["input", "commit_sha", "artifact_sha256"],
+      "properties": {
+        "input": {"type": "string"},
+        "commit_sha": {"type": ["string", "null"]},
+        "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["skill_roots", "files_scanned", "files_skipped", "bytes_scanned"],
+      "properties": {
+        "skill_roots": {"type": "array", "items": {"type": "string"}},
+        "files_scanned": {"type": "integer", "minimum": 0},
+        "files_skipped": {"type": "integer", "minimum": 0},
+        "bytes_scanned": {"type": "integer", "minimum": 0}
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "confidence", "evidence"],
+        "properties": {
+          "name": {"type": "string"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "evidence": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "analyzer_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "duration_ms", "findings_count", "reason"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["completed", "partial", "skipped", "failed"]},
+          "duration_ms": {"type": "integer", "minimum": 0},
+          "findings_count": {"type": "integer", "minimum": 0},
+          "reason": {"type": ["string", "null"]},
+          "version": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "fingerprint",
+          "title",
+          "description",
+          "category",
+          "severity",
+          "confidence",
+          "analyzer",
+          "location",
+          "evidence",
+          "remediation",
+          "references",
+          "cve_id",
+          "verification"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {"analyzer": {"const": "llm"}},
+              "required": ["analyzer"]
+            },
+            "then": {
+              "properties": {"verification": {"type": "object"}}
+            }
+          }
+        ],
+        "properties": {
+          "rule_id": {"type": "string"},
+          "fingerprint": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "category": {"type": "string"},
+          "severity": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "analyzer": {"type": "string"},
+          "location": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "required": ["path", "start_line", "end_line"],
+                "properties": {
+                  "path": {"type": "string"},
+                  "start_line": {"type": ["integer", "null"], "minimum": 1},
+                  "end_line": {"type": ["integer", "null"], "minimum": 1}
+                }
+              }
+            ]
+          },
+          "evidence": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "required": ["kind", "snippet"],
+                "properties": {
+                  "kind": {"type": "string"},
+                  "snippet": {"type": "string"}
+                }
+              }
+            ]
+          },
+          "remediation": {"type": ["string", "null"]},
+          "references": {"type": "array", "items": {"type": "string"}},
+          "cve_id": {"type": ["string", "null"]},
+          "verification": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "candidate_id",
+                  "status",
+                  "method",
+                  "attempts",
+                  "agreements",
+                  "disagreements",
+                  "inconclusive",
+                  "evidence_matched",
+                  "requested_model",
+                  "candidate_prompt_sha256",
+                  "verification_prompt_sha256",
+                  "generation_response_sha256",
+                  "verification_response_sha256",
+                  "co_located_deterministic_rule_ids"
+                ],
+                "properties": {
+                  "candidate_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+                  "status": {"enum": ["corroborated", "disputed", "unverified"]},
+                  "method": {"const": "llm_adversarial_consensus"},
+                  "attempts": {"type": "integer", "minimum": 0},
+                  "agreements": {"type": "integer", "minimum": 0},
+                  "disagreements": {"type": "integer", "minimum": 0},
+                  "inconclusive": {"type": "integer", "minimum": 0},
+                  "evidence_matched": {"type": "boolean"},
+                  "requested_model": {"type": "string"},
+                  "candidate_prompt_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+                  "verification_prompt_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+                  "generation_response_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+                  "verification_response_sha256": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+                  },
+                  "co_located_deterministic_rule_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "uniqueItems": true
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["findings_total", "by_severity"],
+      "properties": {
+        "findings_total": {"type": "integer", "minimum": 0},
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["critical", "high", "medium", "low", "info", "unknown"],
+          "properties": {
+            "critical": {"type": "integer", "minimum": 0},
+            "high": {"type": "integer", "minimum": 0},
+            "medium": {"type": "integer", "minimum": 0},
+            "low": {"type": "integer", "minimum": 0},
+            "info": {"type": "integer", "minimum": 0},
+            "unknown": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["code", "message", "level", "analyzer", "path", "details"],
+        "properties": {
+          "code": {"type": "string"},
+          "message": {"type": "string"},
+          "level": {"enum": ["info", "warning", "error"]},
+          "analyzer": {"type": ["string", "null"]},
+          "path": {"type": ["string", "null"]},
+          "details": {"type": "object"}
+        }
+      }
+    }
+  }
+}

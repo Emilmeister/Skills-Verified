@@ -1,5 +1,5 @@
-version: "1.0"
-updated: "2026-04-16"
+version: "1.1"
+updated: "2026-07-14"
 description: "Signatures for detecting data exfiltration techniques including credential theft, environment variable harvesting, and covert data transfer."
 
 signatures:
@@ -13,18 +13,10 @@ signatures:
       - javascript
       - ruby
 
-  - id: EX002
-    title: "Environment variable bulk harvesting (Python)"
-    description: "Bulk copy of environment variables via os.environ, often the first step in credential exfiltration."
-    pattern: "os\\.environ\\.copy\\s*\\(\\)|dict\\s*\\(\\s*os\\.environ\\s*\\)"
-    severity: MEDIUM
-    languages:
-      - python
-
   - id: EX003
     title: "Environment variable bulk harvesting (Node.js)"
     description: "Bulk access to process.env in Node.js, collecting all environment variables."
-    pattern: "Object\\.(keys|values|entries|assign)\\s*\\(\\s*process\\.env\\s*\\)|JSON\\.stringify\\s*\\(\\s*process\\.env\\s*\\)"
+    pattern: "(?:Object\\.(?:keys|values|entries|assign)\\s*\\(\\s*process\\.env\\s*\\)|JSON\\.stringify\\s*\\(\\s*process\\.env\\s*\\)).{0,500}(?:fetch|axios|http\\.request|sendBeacon)"
     severity: MEDIUM
     languages:
       - javascript
@@ -32,7 +24,7 @@ signatures:
   - id: EX004
     title: "HTTP POST with environment data or file content"
     description: "HTTP POST request sending environment variables or file content to a remote endpoint."
-    pattern: "(requests\\.post|http\\.request|fetch|axios\\.post|urllib).*\\b(os\\.environ|process\\.env|open\\s*\\()"
+    pattern: "(?:requests\\.post|http\\.request|fetch|axios\\.post|urllib).{0,500}\\b(?:os\\.environ|process\\.env|open\\s*\\()"
     severity: HIGH
     languages:
       - python
@@ -51,7 +43,7 @@ signatures:
   - id: EX006
     title: "File content sent via HTTP"
     description: "File content read and sent over HTTP in a single operation chain."
-    pattern: "(read|readFile|read_text|read_bytes).*\\b(requests\\.|http\\.|fetch\\(|axios\\.|urllib)|\\b(requests\\.|http\\.|fetch\\(|axios\\.).*open\\s*\\("
+    pattern: "(?:readFile|read_text|read_bytes).{0,500}\\b(?:requests\\.|http\\.|fetch\\(|axios\\.|urllib)|\\b(?:requests\\.|http\\.|fetch\\(|axios\\.).{0,500}open\\s*\\("
     severity: HIGH
     languages:
       - python
@@ -85,9 +77,9 @@ signatures:
       - javascript
 
   - id: EX010
-    title: "curl/wget with file upload"
-    description: "curl or wget used to upload file content to a remote server."
-    pattern: "(curl|wget)\\s+.*(-d\\s+@|-F\\s+.*=@|--upload-file|--data-binary\\s+@|--post-file)"
+    title: "curl/wget uploads a credential file"
+    description: "curl or wget uploads a well-known credential or operating-system secret file."
+    pattern: "(curl|wget)\\s+.*(-d\\s+@|-F\\s+.*=@|--upload-file|--data-binary\\s+@|--post-file)\\S*(/etc/(passwd|shadow)|\\.ssh/|\\.aws/credentials|\\.npmrc|\\.netrc|\\.env)"
     severity: HIGH
     languages:
       - bash
@@ -105,7 +97,7 @@ signatures:
   - id: EX012
     title: "Keylogger pattern"
     description: "Keyboard input capture hooks combined with data storage or transmission."
-    pattern: "(pynput|keyboard\\.on_press|SetWindowsHookEx|CGEventTapCreate|addEventListener.*keydown)"
+    pattern: "(?:pynput|keyboard\\.on_press|SetWindowsHookEx|CGEventTapCreate)"
     severity: HIGH
     languages:
       - python

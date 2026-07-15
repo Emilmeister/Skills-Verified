@@ -6,15 +6,13 @@ tools = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file to read"
-                }
+                "path": {"type": "string", "description": "Path to the file to read"}
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     }
 ]
+
 
 def handle_read_file(path: str) -> str:
     with open(path) as f:

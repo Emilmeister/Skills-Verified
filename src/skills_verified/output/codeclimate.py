@@ -1,4 +1,3 @@
-import hashlib
 import json
 from pathlib import Path
 
@@ -10,12 +9,8 @@ _SEVERITY_MAP = {
     Severity.MEDIUM: "major",
     Severity.LOW: "minor",
     Severity.INFO: "info",
+    Severity.UNKNOWN: "info",
 }
-
-
-def _fingerprint(analyzer: str, title: str, file_path: str | None, line_number: int | None) -> str:
-    raw = f"{analyzer}:{title}:{file_path}:{line_number}"
-    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def generate_codeclimate(findings: list[Finding]) -> list[dict]:
@@ -30,7 +25,7 @@ def generate_codeclimate(findings: list[Finding]) -> list[dict]:
                 "description": f.description,
                 "categories": ["Security"],
                 "severity": _SEVERITY_MAP[f.severity],
-                "fingerprint": _fingerprint(f.analyzer, f.title, f.file_path, f.line_number),
+                "fingerprint": (f.fingerprint or "").removeprefix("sha256:"),
                 "location": {
                     "path": path,
                     "lines": {"begin": line},

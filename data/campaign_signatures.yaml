@@ -1,5 +1,5 @@
-version: "1.0"
-updated: "2026-04-16"
+version: "1.2"
+updated: "2026-07-14"
 description: "Signatures derived from known malicious campaigns targeting skill/plugin ecosystems."
 
 campaigns:
@@ -9,29 +9,27 @@ campaigns:
     source: "Koi Security ClawHavoc (2026)"
     patterns:
       - pattern: "(Invoke-WebRequest|wget|curl)\\s+.*\\.zip.*(-Password|-p\\s)"
+        standalone: true
         severity: CRITICAL
         description: "Password-protected ZIP download — files requiring passwords at install time are a strong indicator of hidden payloads."
 
       - pattern: "powershell\\s+.*-e(ncodedcommand)?\\s+[A-Za-z0-9+/=]{20,}"
+        standalone: true
         severity: CRITICAL
         description: "PowerShell encoded command execution — base64-encoded PowerShell commands used to evade detection."
 
       - pattern: "(Invoke-Expression|IEX)\\s*\\(\\s*(New-Object\\s+Net\\.WebClient)?\\.?DownloadString\\s*\\("
+        standalone: true
         severity: CRITICAL
         description: "PowerShell download-and-execute via Invoke-Expression with DownloadString."
-
-      - pattern: "(Start-Process|Invoke-Item)\\s+.*\\.(exe|bat|cmd|ps1|vbs)"
-        severity: HIGH
-        description: "Execution of downloaded executable or script files."
 
       - pattern: "\\b\\w+\\.(duckdns\\.org|ngrok\\.io|serveo\\.net|portmap\\.io|localhost\\.run)\\b"
         severity: CRITICAL
         description: "Connection to dynamic DNS or tunneling services commonly used as C2 infrastructure."
 
-      - pattern: "Expand-Archive.*-Force|-DestinationPath.*\\$env:(TEMP|APPDATA)"
-        severity: HIGH
-        description: "Archive extraction to temporary or user-writable directories, common in payload staging."
     indicators:
+      min_file_matches: 1
+      min_string_matches: 1
       files:
         - "install.ps1"
         - "setup.bat"
@@ -58,10 +56,6 @@ campaigns:
         severity: CRITICAL
         description: "Environment variables collected and sent to an external endpoint."
 
-      - pattern: "(Set-MpPreference\\s+-DisableRealtimeMonitoring|systemctl\\s+stop\\s+.*guard|\\biptables\\s+-F\\b)"
-        severity: CRITICAL
-        description: "Security tool or firewall disablement to avoid detection during payload execution."
-
       - pattern: "(pip|npm)\\s+install\\s+.*--index-url\\s+https?://(?!pypi\\.org|registry\\.npmjs\\.org)"
         severity: HIGH
         description: "Package installation from non-standard registry, potentially hosting malicious packages."
@@ -70,13 +64,11 @@ campaigns:
         severity: HIGH
         description: "Fetching and executing raw content from GitHub, a common malware distribution vector."
     indicators:
+      min_file_matches: 1
+      min_string_matches: 1
       files:
-        - "__init__.py"
-        - "setup.py"
         - "postinstall.sh"
       strings:
-        - "b64decode"
-        - "os.environ"
         - "DisableRealtimeMonitoring"
         - "raw.githubusercontent.com"
         - "--index-url"
@@ -89,10 +81,6 @@ campaigns:
       - pattern: "vscode\\.workspace\\.getConfiguration.*\\b(password|token|secret|apiKey|credential)"
         severity: CRITICAL
         description: "VS Code configuration access targeting stored credentials and API keys."
-
-      - pattern: "(claude|anthropic|sonnet|opus).*\\b(extension|plugin).*\\b(install|activate)"
-        severity: HIGH
-        description: "Fake Claude/Anthropic branding in extension metadata to social-engineer trust."
 
       - pattern: "globalState\\.update\\s*\\(.*\\b(token|session|auth|key)\\b"
         severity: HIGH
@@ -110,14 +98,14 @@ campaigns:
         severity: CRITICAL
         description: "Workspace-wide scan for credential files to stage data for exfiltration."
     indicators:
+      min_file_matches: 1
+      min_string_matches: 2
       files:
         - "extension.js"
-        - "package.json"
         - "activate.js"
       strings:
-        - "claude"
-        - "anthropic"
-        - "globalState"
-        - "getConfiguration"
+        - "workspace.findFiles"
+        - "git-credentials"
+        - "settings.json"
         - "child_process"
-        - "vscode.workspace"
+        - "curl"
