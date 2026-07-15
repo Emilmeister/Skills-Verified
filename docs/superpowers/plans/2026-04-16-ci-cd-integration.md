@@ -1,5 +1,7 @@
 # CI/CD Integration Implementation Plan
 
+> **Status: Superseded.** Исторический план; не выполнять его инструкции. Текущий контракт: [Policy-Free Scan Report Roadmap](../specs/2026-07-13-policy-free-scan-report-roadmap.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add threshold-based pass/fail, four output formats (codeclimate, badge, github annotations, markdown), reusable GitHub Action, GitLab CI template, and example workflows.

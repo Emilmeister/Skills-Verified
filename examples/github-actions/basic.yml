@@ -1,15 +1,32 @@
-name: Security Scan
+name: Skill security analysis
 
 on: [push, pull_request]
 
 jobs:
-  trust-scan:
+  scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       - name: Run Skills Verified
-        uses: your-org/skills-verified@v1
-        with:
-          threshold: 70
-          threshold-grade: C
+        id: scan
+        uses: Emilmeister/Skills-Verified@main
+
+      - name: Inspect technical report
+        env:
+          REPORT_PATH: ${{ steps.scan.outputs.report-path }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["REPORT_PATH"], encoding="utf-8") as report_file:
+              report = json.load(report_file)
+          print(json.dumps({
+              "status": report["scan"]["status"],
+              "findings": len(report["findings"]),
+              "analyzer_runs": report["analyzer_runs"],
+          }, indent=2))
+          PY

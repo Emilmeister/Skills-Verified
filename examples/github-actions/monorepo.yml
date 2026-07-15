@@ -1,52 +1,52 @@
-name: Security Scan (Monorepo)
+name: Skill security analysis (monorepo)
 
-on:
-  push:
-    branches: [main, master]
-  pull_request:
+on: [push, pull_request]
 
 jobs:
-  trust-scan:
+  scan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - path: services/auth
-            name: auth-service
-          - path: services/api
-            name: api-service
-          - path: plugins/formatter
-            name: formatter-plugin
-
+        skill:
+          - path: skills/formatter
+            name: formatter
+          - path: skills/reviewer
+            name: reviewer
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Skills Verified — ${{ matrix.service.name }}
+      - name: Scan ${{ matrix.skill.name }}
         id: scan
-        uses: your-org/skills-verified@v1
+        uses: Emilmeister/Skills-Verified@main
         with:
-          source: ${{ matrix.service.path }}
-          threshold: 70
-          threshold-grade: C
-          comment-on-pr: true
-          comment-style: summary
-          generate-badge: true
+          source: ${{ matrix.skill.path }}
+          skip: llm
 
-      - name: Upload report — ${{ matrix.service.name }}
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: trust-report-${{ matrix.service.name }}
-          path: report.json
+      - name: Inspect technical report
+        if: always() && steps.scan.outputs.report-path != ''
+        env:
+          REPORT_PATH: ${{ steps.scan.outputs.report-path }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
 
-      - name: Upload badge — ${{ matrix.service.name }}
+          with open(os.environ["REPORT_PATH"], encoding="utf-8") as report_file:
+              report = json.load(report_file)
+          print(json.dumps({
+              "status": report["scan"]["status"],
+              "findings": len(report["findings"]),
+              "analyzer_runs": report["analyzer_runs"],
+          }, indent=2))
+          PY
+
+      - name: Upload ${{ matrix.skill.name }} report
+        if: always() && steps.scan.outputs.report-path != ''
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: trust-badge-${{ matrix.service.name }}
-          path: badge.json
+          name: skills-verified-${{ matrix.skill.name }}
+          path: ${{ steps.scan.outputs.report-path }}
+          if-no-files-found: error

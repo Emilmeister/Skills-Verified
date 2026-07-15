@@ -1,26 +1,20 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/your-org/skills-verified/main/templates/gitlab-ci-skills-verified.yml'
+  - remote: https://raw.githubusercontent.com/Emilmeister/Skills-Verified/main/templates/gitlab-ci-skills-verified.yml
 
-stages:
-  - security
+stages: [security]
 
-trust-scan:
-  extends: .skills-verified-pip
+skill-security-analysis:
+  extends: .skills-verified
   stage: security
   parallel:
     matrix:
-      - SV_SOURCE: "services/auth"
-      - SV_SOURCE: "services/api"
-      - SV_SOURCE: "plugins/formatter"
+      - SV_SOURCE:
+          - skills/formatter
+          - skills/reviewer
+          - skills/summarizer
   variables:
-    SV_THRESHOLD: "70"
-    SV_THRESHOLD_GRADE: "C"
-    SV_COMMENT_ON_MR: "true"
-    SV_COMMENT_STYLE: "summary"
-    SV_GENERATE_BADGE: "true"
+    SV_SKIP: llm
   artifacts:
-    paths:
-      - report.json
-      - badge.json
+    paths: [report.json]
     when: always
     expire_in: 14 days

@@ -1,69 +1,37 @@
-# CI/CD Example Workflows
+# CI examples
 
-Ready-to-use workflow templates for integrating Skills Verified into GitHub Actions and GitLab CI pipelines.
+Every example runs Skills Verified and stores its policy-free JSON report. The examples inspect `scan.status`, `findings`, and `analyzer_runs`, but do not decide whether a skill may be published.
 
 ## GitHub Actions
 
-| File | Description |
-|---|---|
-| [github-actions/basic.yml](github-actions/basic.yml) | Minimal scan with a threshold gate — suitable for most projects |
-| [github-actions/full.yml](github-actions/full.yml) | All features: PR comments, badge generation, artifact upload, commented-out Docker variant |
-| [github-actions/monorepo.yml](github-actions/monorepo.yml) | Matrix strategy scanning multiple services/plugins in parallel |
+| Example | Purpose |
+| --- | --- |
+| [`github-actions/basic.yml`](github-actions/basic.yml) | Scan one repository and print technical execution data |
+| [`github-actions/full.yml`](github-actions/full.yml) | Configure analyzers and upload the JSON artifact |
+| [`github-actions/monorepo.yml`](github-actions/monorepo.yml) | Produce one independent report per skill directory |
+
+Replace `@main` with a release tag or commit SHA before production use.
+
+The action outputs are `report-path`, `scan-status`, and `findings-count`. The complete, versioned contract remains in the JSON file.
 
 ## GitLab CI
 
-| File | Description |
-|---|---|
-| [gitlab-ci/basic.yml](gitlab-ci/basic.yml) | Minimal include + extends with threshold gate |
-| [gitlab-ci/full.yml](gitlab-ci/full.yml) | Full features: stages, MR comments, badge, artifacts, commented-out Docker variant |
-| [gitlab-ci/monorepo.yml](gitlab-ci/monorepo.yml) | `parallel:matrix` scanning multiple source directories |
+| Example | Purpose |
+| --- | --- |
+| [`gitlab-ci/basic.yml`](gitlab-ci/basic.yml) | Include and run the shared scanner job |
+| [`gitlab-ci/full.yml`](gitlab-ci/full.yml) | Configure source/analyzer selection and artifact retention |
+| [`gitlab-ci/monorepo.yml`](gitlab-ci/monorepo.yml) | Run the scanner as a parallel matrix |
 
----
+The template installs from `SV_INSTALL_SPEC`; pin this variable to a release or commit in production. Its job fails only when the scanner cannot produce a technically usable scan. Findings never alter the process exit code.
 
-## Configuration
+## Consuming the report
 
-### Threshold options
+Send the untouched artifact to the service that owns publication policy. Consumers should check at least:
 
-Both GitHub Actions inputs and GitLab CI variables control when a scan is considered failed.
-
-| GitHub Actions input | GitLab CI variable | Default | Description |
-|---|---|---|---|
-| `threshold` | `SV_THRESHOLD` | `0` | Minimum numeric score (0-100). Fail if score is below this value. |
-| `threshold-grade` | `SV_THRESHOLD_GRADE` | — | Minimum grade (A/B/C/D/F). Fail if grade is worse. Either condition triggers failure. |
-
-Example: `threshold: 70` + `threshold-grade: C` fails the build when the score is below 70 **or** the grade is D/F.
-
-### Other options
-
-| GitHub Actions input | GitLab CI variable | Description |
-|---|---|---|
-| `source` | `SV_SOURCE` | Path to scan. Defaults to `.` (repository root). |
-| `skip` | `SV_SKIP` | Comma-separated list of analyzers to skip (e.g. `llm,semgrep`). |
-| `only` | `SV_ONLY` | Run only these analyzers (e.g. `pattern,guardrails`). |
-| `use-docker` | `SV_USE_DOCKER` | Use the pre-built Docker image instead of pip install. |
-| `comment-on-pr` | `SV_COMMENT_ON_MR` | Post a scan summary as a PR/MR comment (`true`/`false`). |
-| `comment-style` | `SV_COMMENT_STYLE` | Comment verbosity: `full` (all findings) or `summary` (scores only). |
-| `generate-badge` | `SV_GENERATE_BADGE` | Write a `badge.json` shields.io endpoint file. |
-| `python-version` | — | Python version for pip-based install (GitHub Actions only). |
-
----
-
-## Badge Setup
-
-When `generate-badge: true` (or `SV_GENERATE_BADGE: "true"`) is set, the action writes a `badge.json` file compatible with the [shields.io endpoint](https://shields.io/endpoint) format.
-
-Upload `badge.json` to a publicly accessible URL (e.g. GitHub Pages, Gist, S3) and then add the badge to your README:
-
-```markdown
-[![Trust Score](https://img.shields.io/endpoint?url=https://your-host/path/to/badge.json)](https://github.com/your-org/your-repo)
+```python
+status = report["scan"]["status"]
+findings = report["findings"]
+analyzer_runs = report["analyzer_runs"]
 ```
 
-The badge shows the current grade (A–F) and colour-codes it automatically:
-
-| Grade | Colour |
-|---|---|
-| A | brightgreen |
-| B | green |
-| C | yellow |
-| D | orange |
-| F | red |
+`partial` and `failed` describe analysis completeness, not repository safety. Absence of findings is meaningful only together with scope, analyzer runs, diagnostics, scanner version, and ruleset version.

@@ -1,8 +1,5 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/your-org/skills-verified/main/templates/gitlab-ci-skills-verified.yml'
+  - remote: https://raw.githubusercontent.com/Emilmeister/Skills-Verified/main/templates/gitlab-ci-skills-verified.yml
 
-trust-scan:
-  extends: .skills-verified-pip
-  variables:
-    SV_THRESHOLD: "70"
-    SV_THRESHOLD_GRADE: "C"
+skill-security-analysis:
+  extends: .skills-verified

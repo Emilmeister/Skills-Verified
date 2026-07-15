@@ -1,7 +1,9 @@
 # Skills Verified — AI Agent Trust Scanner
 
+> **Status: Superseded.** Исторический документ; не использовать как актуальную спецификацию. Текущий контракт: [Policy-Free Scan Report Roadmap](./2026-07-13-policy-free-scan-report-roadmap.md).
+
 **Date:** 2026-04-12
-**Status:** Approved
+**Original status:** Approved
 
 ## Overview
 

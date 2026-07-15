@@ -1,5 +1,7 @@
 # Skills Verified Implementation Plan
 
+> **Status: Superseded.** Исторический план; не выполнять его инструкции. Текущий контракт: [Policy-Free Scan Report Roadmap](../specs/2026-07-13-policy-free-scan-report-roadmap.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a CLI tool that scans AI agent repositories for vulnerabilities and produces a Trust Score (grade A-F).

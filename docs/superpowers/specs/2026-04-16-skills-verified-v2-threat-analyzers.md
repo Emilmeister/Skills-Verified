@@ -1,7 +1,9 @@
 # Skills Verified v2: Threat Analyzers for AI Agent Skill Vulnerabilities
 
+> **Status: Superseded.** Исторический документ; scoring и прежний report contract больше не действуют. Текущий контракт: [Policy-Free Scan Report Roadmap](./2026-07-13-policy-free-scan-report-roadmap.md).
+
 **Date:** 2026-04-16
-**Status:** Approved
+**Original status:** Approved
 **Previous spec:** [2026-04-12-skills-verified-design.md](./2026-04-12-skills-verified-design.md)
 
 ## Motivation

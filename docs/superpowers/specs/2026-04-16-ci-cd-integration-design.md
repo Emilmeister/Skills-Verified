@@ -1,7 +1,9 @@
 # CI/CD Integration Design
 
+> **Status: Superseded.** Исторический документ; описанные policy-решения и форматы удалены. Текущий контракт: [Policy-Free Scan Report Roadmap](./2026-07-13-policy-free-scan-report-roadmap.md).
+
 **Date:** 2026-04-16
-**Status:** Approved
+**Original status:** Approved
 
 ## Goal
 

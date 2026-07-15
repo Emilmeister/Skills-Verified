@@ -1,868 +1,468 @@
 # Skills Verified
 
-**AI Agent Trust Scanner** — CLI-утилита для сертификации репозиториев AI-агентов. Сканирует код на уязвимости, известные CVE, prompt injection, чрезмерные полномочия и проблемы supply chain, после чего выдаёт итоговый **Trust Score** в формате грейда A-F с разбивкой по категориям.
+`skills-verified` — CLI для статической проверки репозиториев AI-agent skills.
+Утилита принимает локальный каталог или HTTPS Git URL и печатает в `stdout`
+policy-free JSON: найденные проблемы, evidence, охваченный scope и технический
+статус каждого анализатора.
 
-Инструмент создан для быстрой оценки безопасности репозиториев со skills, plugins и агентами до того, как их подключат к боевой системе. Работает как автономная CLI-утилита — установил, запустил, получил отчёт.
+Scanner не вычисляет рейтинг доверия и не решает, публиковать ли skill. Такое
+решение принимает внешний сервис по собственным правилам. Подробное устройство
+pipeline описано в [ARCH.md](ARCH.md), JSON-контракт — в
+[`report.schema.json`](src/skills_verified/report.schema.json).
 
----
+## Быстрый запуск
 
-## Оглавление
+Нужен Python 3.11+ и Git. Из корня проекта:
 
-- [Зачем это нужно](#зачем-это-нужно)
-- [Возможности](#возможности)
-- [Установка](#установка)
-- [Быстрый старт](#быстрый-старт)
-- [Docker](#docker)
-- [Анализаторы](#анализаторы)
-- [Использование](#использование)
-- [Trust Score](#trust-score)
-- [Пример вывода](#пример-вывода)
-- [Структура JSON-отчёта](#структура-json-отчёта)
-- [Интеграция с CI/CD](#интеграция-с-cicd)
-- [Архитектура](#архитектура)
-- [Разработка](#разработка)
-- [FAQ](#faq)
-- [Лицензия](#лицензия)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 
----
+skills-verified /path/to/skill \
+  --skip llm,bandit,shellcheck,semgrep \
+  > report.json
+```
 
-## Зачем это нужно
+Для PowerShell virtualenv активируется командой
+`.venv\Scripts\Activate.ps1`.
 
-Современные AI-агенты, skills и плагины часто получают доступ к критической инфраструктуре: файловой системе, сети, процессам, секретам. Код в таких репозиториях может содержать:
+Проверить результат:
 
-- **Опасные паттерны** — `eval`, `exec`, `shell=True`, hardcoded API-ключи, небезопасная десериализация
-- **Известные уязвимости** в зависимостях (CVE)
-- **Prompt injection** — скрытые инструкции, которые могут перехватить управление LLM
-- **Jailbreak-маркеры** — DAN, STAN, developer mode и прочие обходы ограничений
-- **Чрезмерные полномочия** — агент может удалить файлы, убить процессы или скачать что-то из интернета, хотя заявлен как "помощник по форматированию"
-- **Supply chain атаки** — typosquatting, злонамеренные `postinstall`-скрипты, опасный код в `setup.py`
+```bash
+jq '{status: .scan.status, summary, analyzer_runs, diagnostics}' report.json
+```
 
-Skills Verified автоматизирует проверку всего перечисленного и выдаёт одну цифру — Trust Score, по которой легко принять решение: доверять репозиторию или нет.
-
----
-
-## Возможности
-
-- **8 анализаторов** — 6 встроенных и 2 опциональных (Bandit, Semgrep)
-- **Опциональный LLM-анализ** через любой OpenAI-совместимый API (OpenAI, Anthropic через прокси, Ollama, vLLM, LM Studio)
-- **Trust Score A-F** с разбивкой по 5 категориям
-- **Цветной терминальный вывод** через Rich с таблицами и группировкой по severity
-- **JSON-отчёт** для интеграции в CI/CD
-- **Работа с GitHub URL** — автоматический `git clone --depth=1` во временный каталог
-- **Работа с локальным путём** — сканирование уже скачанного репо
-- **Фильтрация анализаторов** — `--skip` для исключения, `--only` для запуска только нужных
-- **Graceful degradation** — если внешний инструмент (Bandit/Semgrep/pip-audit) не установлен, анализатор пропускается с предупреждением, остальные продолжают работу
-
----
+`scan.status=complete` означает только, что выбранные проверки завершились. Ноль
+findings не является гарантией безопасности.
 
 ## Установка
 
-### Требования
+| Команда | Что устанавливается |
+|---|---|
+| `python -m pip install -e .` | Основной CLI и встроенные анализаторы |
+| `python -m pip install -e ".[scanners]"` | CLI, Bandit, ShellCheck и Semgrep |
+| `python -m pip install -e ".[dev,scanners]"` | Полное окружение разработчика |
 
-- Python 3.11+
-- git (для клонирования удалённых репозиториев)
+Bandit, ShellCheck и Semgrep необязательны. LLM-анализатор использует стандартный
+OpenAI-compatible HTTP API и не требует отдельного Python SDK.
 
-### Базовая установка
-
-```bash
-git clone <repo-url> skills-verified
-cd skills-verified
-
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-pip install -e ".[dev]"
-```
-
-### С поддержкой LLM
-
-```bash
-pip install -e ".[llm]"
-```
-
-Устанавливает `openai` — клиент для OpenAI-совместимых API. Без этого ключа `llm_analyzer` не будет работать, даже если передать `--llm-url`.
-
-### Внешние инструменты (опционально)
-
-Эти инструменты необязательны — если они не установлены, соответствующие анализаторы будут автоматически пропущены. Но для максимального покрытия рекомендуется:
-
-```bash
-pip install bandit        # Статический анализ Python (Task B***)
-pip install semgrep       # Semantic grep для security-audit правил
-pip install pip-audit     # Проверка Python-зависимостей на CVE
-# npm уже должен быть в системе для npm audit
-```
-
-### Проверка установки
+Проверка установки:
 
 ```bash
 skills-verified --help
 ```
 
-Должна появиться справка с описанием всех флагов.
+## Как запускать
 
----
+### Локальный репозиторий
 
-## Быстрый старт
+Базовый запуск без необязательных анализаторов:
 
 ```bash
-# Просканировать GitHub-репозиторий одной командой
-skills-verified https://github.com/Nikolay-Shirokov/cc-1c-skills
-
-# Сохранить JSON-отчёт рядом с выводом в консоль
-skills-verified https://github.com/user/repo --output report.json
-
-# Запустить только быстрые анализаторы
-skills-verified https://github.com/user/repo --skip bandit,semgrep,cve
+skills-verified ./skill-repository \
+  --skip llm,bandit,shellcheck,semgrep \
+  > report.json
 ```
 
----
+После установки `.[scanners]` полный детерминированный прогон без передачи кода
+в LLM запускается так:
+
+```bash
+skills-verified ./skill-repository \
+  --skip llm \
+  > report.json
+```
+
+Bandit и Semgrep сначала ищутся рядом с Python-интерпретатором, запустившим CLI,
+а затем в `PATH`, поэтому scanner не подхватывает случайную глобальную версию.
+Semgrep использует встроенные зафиксированные rulesets, проверяет их SHA-256 и
+передаёт инструменту локальные YAML; сеть и изменяемый Registry не нужны:
+
+```bash
+skills-verified ./skill-repository \
+  --only semgrep \
+  > semgrep-report.json
+```
+
+Полностью offline-проверка не должна запускать только OSV и LLM:
+
+```bash
+skills-verified ./skill-repository \
+  --skip cve,llm \
+  > offline-report.json
+```
+
+Установленные Bandit, ShellCheck и Semgrep работают локально, поэтому их можно
+оставить в offline-наборе.
+
+### Удалённый репозиторий
+
+CLI принимает только HTTPS URL, делает shallow clone и удаляет временный каталог
+после анализа:
+
+```bash
+skills-verified https://github.com/example/skill.git \
+  --skip llm,bandit,shellcheck,semgrep \
+  > report.json
+```
+
+HTTP, URL со встроенными credentials, private/reserved IP и SSH через публичный
+CLI отклоняются. SSH доступен только программным вызовом
+`fetch_repo(..., allow_ssh=True)`.
+Для крупных доверенно выбранных репозиториев лимит shallow clone можно поднять,
+не отключая остальные проверки: `--max-clone-mib 512` или
+`SV_MAX_CLONE_MIB=512` (допустимо `1..4096`).
+Для медленного большого clone задайте `--clone-timeout 240` или
+`SV_CLONE_TIMEOUT=240`.
+Если рабочее дерево превышает inventory limit, отдельно задайте
+`--max-scan-mib 256` или `SV_MAX_SCAN_MIB=256` (допустимо `1..1024`).
+
+```bash
+skills-verified https://github.com/example/large-skills.git \
+  --skip llm \
+  --clone-timeout 240 \
+  --max-clone-mib 512 \
+  --max-scan-mib 512 \
+  > report.json
+```
+
+### Выбор анализаторов
+
+```bash
+skills-verified ./skill --only 'pattern,guardrails,mcp' > report.json
+skills-verified ./skill --skip 'cve,llm,semgrep' > report.json
+```
+
+Доступные имена в стабильном порядке `analyzer_runs`:
+
+```text
+pattern, cve, bandit, shellcheck, semgrep, guardrails, permissions, supply_chain,
+llm, obfuscation, reverse_shell, exfiltration, behavioral, mcp,
+config_injection, metadata, known_threats, privilege
+```
+
+Неизвестное имя, пересечение `--only` и `--skip` или пустой итоговый набор дают
+CLI-ошибку с кодом `2`.
+
+По умолчанию одновременно запускаются до трёх независимых анализаторов. Лимит
+задаётся через `--analyzer-concurrency` или `SV_ANALYZER_CONCURRENCY` (`1..18`);
+значение `1` включает последовательный режим. Порядок завершения не влияет на
+порядок runs и diagnostics в JSON. Это отдельный пул верхнего уровня;
+`--llm-concurrency` ограничивает HTTP-запросы внутри LLM-анализатора.
+
+Для интерактивного запуска прогресс включается автоматически, если `stderr` —
+терминал. Его можно явно включить или отключить:
+
+```bash
+skills-verified ./skill --progress --analyzer-concurrency 3 > report.json
+skills-verified ./skill --no-progress > report.json
+```
+
+Старт, статус, время каждого анализатора и прогресс LLM batches печатаются только
+в `stderr`, поэтому перенаправленный `stdout` остаётся валидным JSON.
+Итоговые времена доступны в `scan.duration_ms` и `analyzer_runs[].duration_ms`:
+
+```bash
+jq '{total_ms: .scan.duration_ms, analyzers: [.analyzer_runs[] | {name, status, duration_ms}]}' report.json
+```
+
+Из-за параллельного запуска сумма времён анализаторов может быть больше общего
+времени scan.
+
+### Shell-анализ
+
+ShellCheck запускается для `.sh`, `.bash` и файлов без расширения с shebang
+`sh`/`bash` только внутри обнаруженных skill roots:
+
+```bash
+skills-verified ./skill --only shellcheck,pattern > shell-report.json
+```
+
+ShellCheck принимает `error`, `warning` и два security-relevant `info` rules:
+`SC2029` (remote-command expansion) и `SC2035` (option injection через glob).
+Остальные `info/style` отбрасываются как code-quality шум. `pattern` дополняет
+его узкими flow-проверками для dynamic `eval`, caller-controlled `source`,
+непроверенной распаковки и predictable temporary files. Repository
+`.shellcheckrc`, `SHELLCHECK_OPTS` и inline `# shellcheck disable=...` не могут
+скрыть результат. Произвольные `source`-файлы не подключаются, scripts никогда
+не исполняются. Rule IDs имеют вид `SV-SHELLCHECK-SC2115`, а фактическая версия
+инструмента сохраняется в `analyzer_runs[].version`.
+
+### LLM-анализ
+
+LLM является явным opt-in, потому что выбранному endpoint передаётся содержимое
+исходных файлов после redaction очевидных литеральных секретов. Выражения вроде
+`os.getenv("TOKEN")` и `config["password"]` не скрываются: они не содержат само
+значение секрета и нужны для корректного source-to-sink анализа.
+
+```bash
+export SV_LLM_URL='https://llm.example.com/v1'
+export SV_LLM_MODEL='security-model'
+export SV_LLM_KEY='replace-with-secret'
+export SV_LLM_CONCURRENCY=3
+
+skills-verified ./skill --only llm --progress > llm-report.json
+```
+
+Те же значения принимаются через `--llm-url`, `--llm-model` и `--llm-key`, но
+секрет рекомендуется задавать только через `SV_LLM_KEY`: CLI-аргументы могут
+быть видны другим локальным процессам.
+По умолчанию запрос содержит `response_format: {"type": "json_object"}`. Это
+режим JSON, а не JSON Schema: форму ответа, пути, строки и типы полей утилита
+повторно проверяет локально. Невалидный ответ не попадает в `findings` и
+отмечается diagnostic `llm_response_invalid`.
+
+Если обнаружены skill roots, LLM получает только файлы внутри них; `SKILL.md`
+и затем `scripts/` идут первыми. Для репозитория без skills анализируется весь
+допустимый inventory. Проверка выполняется в два этапа. Первый запрос создаёт
+кандидатов, после чего каждый кандидат привязывается к существующему пути и
+exact-цитате в этом файле
+после нормализации переносов, пустых строк и внешних отступов. Реальный диапазон
+не более 20 строк вычисляется из найденной цитаты; номера строк модели служат
+только подсказкой при нескольких совпадениях. Равноудалённая неоднозначность и
+цитаты, отсутствующие в файле, отклоняются. Перепривязка фиксируется diagnostic
+`llm_evidence_rebound` без сохранения исходного кода. Затем три разных
+adversarial-lens запроса пытаются опровергнуть кандидата. Результат записывается
+в `finding.verification.status`:
+
+- `corroborated` — не менее двух из трёх проверок подтвердили прямое evidence;
+- `disputed` — не менее двух проверок отвергли утверждение;
+- `unverified` — консенсуса нет, проверка отключена или завершилась не полностью.
+
+Это не score и не решение о публикации. `confidence` остаётся исходной оценкой
+модели и не участвует в консенсусе. Даже `corroborated` означает согласие
+проверок, а не математическую гарантию отсутствия hallucination.
+Кандидаты с валидным evidence остаются findings при любом verification status:
+внешний сервис сам решает, отклонять ли `disputed` или `unverified`.
+`candidate_id` включает claim, severity, путь, полный диапазон и evidence, поэтому
+разные утверждения на одной строке проверяются независимо. Если evidence содержит
+заменённый секрет, его `kind` равен `redacted_source`, а hash фактического LLM
+prompt хранится в provenance.
+
+Ответы с `finish_reason`, отличным от `stop`, отсутствующим candidate ID или
+неполной/невалидной структурой не считаются чистым результатом и переводят run в
+`partial`. В отчёте сохраняется requested model; фактически сообщённые provider
+model/system fingerprint находятся в provenance diagnostics.
+Candidate request с wall-clock timeout или неполным provider response получает
+ровно один bounded retry: исходный batch детерминированно делится на две меньшие
+line-aware части, а их общий wall-clock budget не превышает budget одной попытки.
+Retry одной волны остаются параллельными, координаты строк и hash каждого
+фактического prompt фиксируются в `llm_batch_provenance`. Остальные API и
+validation errors не повторяются автоматически. Retry не рекурсивен: если хотя
+бы одна из двух частей снова не завершилась, LLM run остаётся `partial`.
+
+Если endpoint действительно поддерживает OpenAI JSON Schema, строгую схему можно
+передать провайдеру дополнительно к обязательной локальной валидации:
+
+```bash
+skills-verified ./skill --only llm --llm-json-schema > llm-report.json
+```
+
+Endpoint, который не поддерживает `response_format`, запускается так:
+
+```bash
+skills-verified ./skill \
+  --only llm \
+  --no-llm-structured-output \
+  > llm-report.json
+```
+
+Для медленных reasoning-моделей можно увеличить лимиты запроса и ответа:
+
+```bash
+skills-verified ./skill --only llm \
+  --llm-timeout 180 \
+  --llm-total-timeout 1800 \
+  --llm-max-tokens 16384 \
+  --llm-token-parameter max_completion_tokens \
+  --llm-reasoning-effort minimal \
+  --llm-concurrency 3 \
+  --llm-verification-runs 3 \
+  > llm-report.json
+```
+
+Те же параметры доступны через `SV_LLM_TIMEOUT`, `SV_LLM_TOTAL_TIMEOUT` и
+`SV_LLM_MAX_TOKENS`. По умолчанию одновременно выполняются три LLM-запроса;
+лимит `1..8` задаётся через `--llm-concurrency` или `SV_LLM_CONCURRENCY`.
+Значение `1` включает прежний последовательный режим. Число проверок задаётся через
+`SV_LLM_VERIFICATION_RUNS` (от `0` до `5`), а provider-side schema — через
+`SV_LLM_JSON_SCHEMA`. Значение `0` отключает consensus и оставляет кандидатов в
+статусе `unverified`. По умолчанию LLM получает все batch всех подходящих файлов;
+большие файлы делятся на сегменты с исходными номерами строк и не обрезаются.
+Опциональный бюджет можно задать через `--llm-max-batches` или
+`SV_LLM_MAX_BATCHES` положительным целым числом. Значение `0` не имеет особого
+смысла и отклоняется CLI. Если batch больше явно заданного лимита, run становится
+`partial` с diagnostic `llm_batch_limit_exceeded`.
+
+Общий deadline по умолчанию не установлен: каждый запрос всё равно ограничен
+`--llm-timeout`. При необходимости общий бюджет задаётся явно через
+`--llm-total-timeout` или `SV_LLM_TOTAL_TIMEOUT`; незавершённое покрытие отражается
+как `partial`.
+
+По умолчанию лимит отправляется как `max_tokens` для совместимости с Ollama,
+LM Studio и legacy endpoints. Для моделей, требующих новый параметр, используйте
+`--llm-token-parameter max_completion_tokens` или
+`SV_LLM_TOKEN_PARAMETER=max_completion_tokens`.
+Reasoning effort передаётся только по явной настройке:
+`--llm-reasoning-effort minimal` или
+`SV_LLM_REASONING_EFFORT=minimal`. Не задавайте её для endpoint, который не
+поддерживает OpenAI-compatible поле `reasoning_effort`.
+
+Для корпоративного CA worker учитывает `SSL_CERT_FILE`.
+
+### Сохранение результата
+
+По умолчанию JSON печатается в `stdout`. `--output` дополнительно сохраняет ту же
+структуру в файл; вывод в `stdout` при этом остаётся:
+
+```bash
+skills-verified ./skill \
+  --skip llm,bandit,shellcheck,semgrep \
+  --output reports/report.json \
+  >/dev/null
+
+skills-verified ./skill --compact > report.min.json
+```
+
+### Просмотр JSON в браузере
+
+Откройте автономный `report-viewer.html` и выберите любой JSON-отчёт через кнопку
+«Выбрать JSON» или перетащите файл в окно:
+
+```bash
+open report-viewer.html
+```
+
+Viewer обрабатывает файл только в браузере, показывает фактические findings,
+категории, analyzer runs и diagnostics и не вычисляет score или verdict.
+
+## Статусы и коды завершения
+
+`scan.status` описывает качество выполнения, а не публикационную политику:
+
+- `complete` — все выбранные анализаторы завершились полностью;
+- `partial` — анализатор или часть scope были пропущены либо ограничены;
+- `failed` — безопасный inventory не построен или ни один анализатор не дал
+  результата.
+
+Каждый элемент `analyzer_runs` имеет собственный статус: `completed`, `partial`,
+`skipped` или `failed`. Причины находятся в `reason` и `diagnostics`.
+
+| Exit code | Значение |
+|---:|---|
+| `0` | JSON сформирован; `scan.status` равен `complete` или `partial` |
+| `2` | Ошибка аргументов, source или подготовки репозитория |
+| `3` | Scan имеет статус `failed` или не записан `--output` |
+
+## JSON-контракт
+
+Отчёт содержит:
+
+- `source` — исходный input, commit SHA и hash реально проверенного artifact;
+- `scope` и `platforms` — какие файлы, skill roots и платформы обнаружены;
+- `analyzer_runs` — версии, длительность, статус и число findings;
+- `findings` — стабильные `rule_id`, fingerprint, severity, confidence, location,
+  evidence, remediation, references и для LLM-кандидатов typed `verification`;
+- `diagnostics` — parse errors, ограничения, недоступные или частичные проверки;
+- `summary` — только агрегированное число findings по severity, без score/verdict.
+
+Пример выборки для внешнего сервиса:
+
+```bash
+jq '{
+  schema_version,
+  status: .scan.status,
+  artifact: .source.artifact_sha256,
+  scope,
+  analyzer_runs,
+  findings,
+  diagnostics
+}' report.json
+```
+
+Потребитель обязан учитывать `scan.status`, `scope`, `analyzer_runs` и
+`diagnostics`; отсутствие findings само по себе не означает безопасный skill.
 
 ## Docker
 
-Контейнеризированный запуск — без локальной установки Python, с предустановленными Bandit/Semgrep/pip-audit/npm. Удобно для CI/CD или одноразовых проверок на чужих машинах.
+Образ включает Bandit, ShellCheck и Semgrep:
 
-### Сборка образа
+```bash
+docker build -t skills-verified .
+
+docker run --rm \
+  -v "/absolute/path/to/skill:/input:ro" \
+  skills-verified /input \
+  --skip llm,semgrep \
+  > report.json
+```
+
+Удалённый репозиторий не требует volume:
+
+```bash
+docker run --rm skills-verified \
+  https://github.com/example/skill.git \
+  --skip llm,semgrep \
+  > report.json
+```
+
+Для Docker Compose положите проверяемые файлы в `workspace/`:
 
 ```bash
 docker compose build
-```
-
-Один раз собирается образ ~500MB с Python 3.11, Node.js, всеми внешними инструментами и самой утилитой.
-
-### Запуск через docker compose
-
-**Сканирование GitHub URL:**
-
-```bash
-# По умолчанию — cc-1c-skills
-docker compose run --rm scan-url
-
-# Свой репо через переменную окружения
-REPO_URL=https://github.com/user/repo docker compose run --rm scan-url
-
-# Отчёт окажется в ./reports/report.json
-```
-
-**Сканирование локального репо:**
-
-```bash
-# Положи репозиторий в ./workspace/
-cp -r /path/to/repo ./workspace/
-
-docker compose run --rm scan-local
-```
-
-**Произвольная команда с любыми флагами:**
-
-```bash
 docker compose run --rm skills-verified \
-  https://github.com/user/repo \
-  --skip bandit,semgrep \
-  --output /reports/report.json
+  /workspace \
+  --skip llm,semgrep \
+  --output /reports/report.json \
+  >/dev/null
 ```
 
-### Запуск через docker напрямую
-
-```bash
-# Собрать
-docker build -t skills-verified .
-
-# Просканировать URL, отчёт в текущую директорию
-docker run --rm \
-  -v "$PWD/reports:/reports" \
-  skills-verified https://github.com/user/repo --output /reports/report.json
-
-# Просканировать локальный путь
-docker run --rm \
-  -v "/path/to/repo:/workspace:ro" \
-  -v "$PWD/reports:/reports" \
-  skills-verified /workspace --output /reports/report.json
-
-# С LLM-анализом
-docker run --rm \
-  -v "$PWD/reports:/reports" \
-  -e SV_LLM_URL=https://api.openai.com/v1 \
-  -e SV_LLM_MODEL=gpt-4o \
-  -e SV_LLM_KEY=sk-xxx \
-  skills-verified https://github.com/user/repo --output /reports/report.json
-```
-
-### LLM через env-файл
-
-Создай `.env` в корне проекта:
-
-```bash
-SV_LLM_URL=https://api.openai.com/v1
-SV_LLM_MODEL=gpt-4o
-SV_LLM_KEY=sk-xxx
-REPO_URL=https://github.com/user/repo
-```
-
-Затем:
-
-```bash
-docker compose run --rm scan-url
-```
-
-Docker Compose автоматически подхватит переменные из `.env`.
-
-### Volumes
-
-Образ определяет два volume:
-
-| Volume | Описание |
-|---|---|
-| `/workspace` | Монтируется локальный репо для сканирования (read-only рекомендуется) |
-| `/reports` | Сюда пишутся JSON-отчёты |
-
-В `docker-compose.yml` они мапятся в `./workspace` и `./reports` текущей директории.
-
----
-
-## Анализаторы
-
-### 1. Pattern Analyzer (встроенный, `pattern`)
-
-Regex-поиск опасных паттернов в исходниках. Работает без внешних зависимостей.
-
-**Что ищет:**
-
-| Паттерн | Severity | Почему опасно |
-|---|---|---|
-| `eval()` | CRITICAL | Исполнение произвольного кода |
-| `exec()` | CRITICAL | Исполнение произвольного кода |
-| `compile()` | HIGH | Может использоваться для обхода eval |
-| `shell=True` | HIGH | Shell injection |
-| `os.system()` | HIGH | Shell injection |
-| `os.popen()` | HIGH | Shell injection |
-| `pickle.load()` | HIGH | Десериализация произвольного кода |
-| `yaml.load()` без SafeLoader | MEDIUM | Десериализация произвольного кода |
-| Hardcoded API keys/passwords | HIGH | Утечка секретов |
-
-Сканирует: `.py`, `.js`, `.mjs`, `.ts`, `.sh`, `.bash`, `.ps1`, `.rb`
-
-### 2. CVE Analyzer (внешний, `cve`)
-
-Проверяет зависимости на известные CVE через официальные инструменты.
-
-**Как работает:**
-- Находит `requirements*.txt`, `Pipfile`, `pyproject.toml` → запускает `pip-audit`
-- Находит `package-lock.json` → запускает `npm audit`
-- Парсит JSON-вывод, маппит severity в единую шкалу, извлекает CVE-ID
-
-**Требует:** `pip-audit` для Python, `npm` для Node.js
-
-### 3. Bandit Analyzer (внешний, `bandit`)
-
-Обёртка над [Bandit](https://github.com/PyCQA/bandit) — стандартным статическим анализатором Python от OpenStack. Находит вещи, которые regex не поймает: use-after-free в контекстах, подозрительные импорты, weak crypto и т.д.
-
-**Требует:** `pip install bandit`
-
-**Severity mapping:** Bandit HIGH → HIGH, MEDIUM → MEDIUM, LOW → LOW
-
-### 4. Semgrep Analyzer (внешний, `semgrep`)
-
-Обёртка над [Semgrep](https://semgrep.dev) с правилами `p/security-audit` и `p/python`. Semantic-grep — находит уязвимости на уровне AST, а не regex.
-
-**Требует:** `pip install semgrep`
-
-### 5. Guardrails Analyzer (встроенный, `guardrails`)
-
-Поиск атак на LLM в текстовых файлах. Ключевой анализатор для AI-агентов.
-
-**Что ищет:**
-
-**Prompt injection паттерны:**
-- `ignore (previous|prior|above) instructions` → CRITICAL
-- `disregard your instructions` → CRITICAL
-- `you are now ...` (роль-override) → HIGH
-- `ignore all safety guidelines` → CRITICAL
-- `output your system prompt` → HIGH
-
-**Jailbreak маркеры:**
-- `developer mode` → CRITICAL
-- `DAN ... do anything` → CRITICAL
-- `STAN ... strive to avoid` → CRITICAL
-
-**Скрытые Unicode символы:** U+202A–U+202E (bidi-override), U+2066–U+2069, U+200B–U+200D (zero-width), U+FEFF (BOM), U+2060 (word joiner)
-
-**Base64-инъекции:** декодирует подозрительные base64-строки и проверяет декодированное содержимое на ключевые слова (`ignore`, `system`, `prompt`, `jailbreak`, `override`)
-
-Сканирует: `.md`, `.txt`, `.yaml`, `.yml`, `.json`, `.toml`, `.py`, `.js`, `.ts`
-
-### 6. Permissions Analyzer (встроенный, `permissions`)
-
-Анализ того, какие системные ресурсы использует код. Помогает оценить, соответствуют ли полномочия заявленной функции.
-
-**Что ищет:**
-
-| Категория | Паттерны | Severity |
-|---|---|---|
-| Деструктивные FS-операции | `shutil.rmtree` | HIGH |
-| Удаление файлов | `os.remove`, `os.unlink`, `os.rmdir` | MEDIUM |
-| Запуск процессов | `subprocess.Popen` | MEDIUM |
-| Убийство процессов | `os.kill` | HIGH |
-| HTTP-запросы | `requests.*`, `urllib.request.*`, `httpx.*` | LOW |
-| Низкоуровневая сеть | `socket.socket` | MEDIUM |
-
-### 7. Supply Chain Analyzer (встроенный, `supply_chain`)
-
-Ищет атаки на цепочку поставок зависимостей.
-
-**Что ищет:**
-
-- **Typosquatting** — сравнивает имена зависимостей с популярными пакетами через расстояние Левенштейна. Пример: `reqeusts` vs `requests` (distance 1), `loadsh` vs `lodash` (distance 2)
-- **Подозрительные lifecycle-скрипты** в `package.json` — `preinstall`, `postinstall`, `preuninstall`, `postuninstall` с командами `curl`, `wget`, `bash`, `sh`, `eval`, `exec`
-- **Код в `setup.py`** — `os.system`, `subprocess.run/call/Popen`, `exec` — всё, что исполняется при установке пакета
-
-Списки популярных пакетов — встроенные (20 для Python, 20 для npm). Легко расширяются в `supply_chain_analyzer.py`.
-
-### 8. LLM Analyzer (опциональный, `llm`)
-
-Семантический анализ кода через LLM. Находит логические ошибки, которые не ловят регулярки и AST-анализаторы:
-
-- SQL injection через конкатенацию
-- Race conditions
-- Логические ошибки в авторизации
-- Information disclosure
-- Unsafe data handling в бизнес-логике
-
-**Как работает:**
-
-1. Собирает файлы с расширениями `.py`, `.js`, `.ts`, `.sh`, `.ps1`, `.rb`
-2. Батчит их по размеру (по умолчанию 50 000 символов на батч)
-3. Отправляет каждый батч в LLM с системным промптом, требующим JSON-ответ
-4. Парсит ответ (поддерживает markdown code blocks), извлекает находки
-5. Низкая confidence (<0.5) автоматически понижает CRITICAL/HIGH до MEDIUM
-
-**Включается только при наличии всех трёх параметров:** `--llm-url`, `--llm-model`, `--llm-key`. Работает с любым OpenAI-совместимым API.
-
----
-
-## Использование
-
-### Базовые команды
-
-```bash
-# GitHub URL (автоматический clone)
-skills-verified https://github.com/user/repo
-
-# SSH URL
-skills-verified git@github.com:user/repo.git
-
-# Локальный путь
-skills-verified /path/to/local/repo
-skills-verified ./relative/path
-skills-verified .
-```
-
-### Флаги
-
-| Флаг | Описание |
-|---|---|
-| `--output, -o PATH` | Сохранить JSON-отчёт в файл |
-| `--skip NAMES` | Пропустить анализаторы (через запятую) |
-| `--only NAMES` | Запустить только указанные анализаторы |
-| `--llm-url URL` | Base URL OpenAI-совместимого API |
-| `--llm-model NAME` | Имя модели |
-| `--llm-key KEY` | API-ключ |
-| `--help` | Показать справку |
-
-**Доступные имена анализаторов:** `pattern`, `cve`, `bandit`, `semgrep`, `guardrails`, `permissions`, `supply_chain`, `llm`
-
-### Примеры
-
-```bash
-# Минимальная проверка — только встроенные анализаторы
-skills-verified /path/to/repo --skip bandit,semgrep,cve,llm
-
-# Только безопасность агентов (prompt injection + полномочия)
-skills-verified /path/to/repo --only guardrails,permissions
-
-# Только проверка зависимостей
-skills-verified /path/to/repo --only cve,supply_chain
-
-# Полная проверка с JSON-отчётом
-skills-verified https://github.com/user/repo --output /tmp/report.json
-
-# С LLM-анализом через OpenAI
-skills-verified https://github.com/user/repo \
-  --llm-url https://api.openai.com/v1 \
-  --llm-model gpt-4o \
-  --llm-key sk-xxx
-
-# С локальным Ollama
-skills-verified /path/to/repo \
-  --llm-url http://localhost:11434/v1 \
-  --llm-model qwen2.5-coder:32b \
-  --llm-key ollama
-
-# С vLLM
-skills-verified /path/to/repo \
-  --llm-url http://localhost:8000/v1 \
-  --llm-model meta-llama/Llama-3.3-70B-Instruct \
-  --llm-key EMPTY
-```
-
-### Переменные окружения
-
-Все `--llm-*` флаги имеют соответствующие env-переменные:
-
-```bash
-export SV_LLM_URL=https://api.openai.com/v1
-export SV_LLM_MODEL=gpt-4o
-export SV_LLM_KEY=sk-xxx
-
-# Теперь LLM-анализ включается автоматически
-skills-verified https://github.com/user/repo
-```
-
-**Приоритет:** CLI-флаги > env-переменные. Удобно держать URL+модель в env, а ключ передавать флагом.
-
----
-
-## Trust Score
-
-### Система штрафов
-
-Каждая из 5 категорий стартует со 100 баллов. За каждую находку вычитаются баллы в зависимости от severity:
-
-| Severity | Штраф |
-|---|---|
-| CRITICAL | −25 |
-| HIGH | −15 |
-| MEDIUM | −7 |
-| LOW | −3 |
-| INFO | 0 |
-
-Минимум категории: 0 (ниже не упадёт). **Общий Trust Score** — среднее арифметическое по 5 категориям.
-
-### Грейды
-
-| Балл | Грейд | Интерпретация |
-|---|---|---|
-| 90-100 | **A** | Репозиторий выглядит безопасным, проблем почти нет |
-| 80-89 | **B** | Незначительные проблемы, допустимо с ручным ревью |
-| 65-79 | **C** | Заметные проблемы, требуется внимательная проверка |
-| 50-64 | **D** | Серьёзные проблемы, не рекомендуется к использованию |
-| 0-49 | **F** | Критические проблемы, не использовать |
-
-### Пример расчёта
-
-Репозиторий найдено: 1 CRITICAL в Code Safety, 2 HIGH в Permissions, ничего в остальных категориях.
-
-```
-Code Safety:  100 − 25 = 75  (C)
-CVE:          100          (A)
-Guardrails:   100          (A)
-Permissions:  100 − 15 − 15 = 70  (C)
-Supply Chain: 100          (A)
-
-Overall: (75 + 100 + 100 + 70 + 100) / 5 = 89  → Grade B
-```
-
----
-
-## Пример вывода
-
-### Консоль
-
-```
-╭──────────────────────────────────────────────────────────────╮
-│ Skills Verified — AI Agent Trust Scanner                     │
-╰──────────────────────────────────────────────────────────────╯
-
-  Repository: https://github.com/Nikolay-Shirokov/cc-1c-skills
-  Analyzers:  pattern, guardrails, permissions, supply_chain
-  LLM analyzer: skipped
-
-╭──────────────────────────────────────────────────────────────╮
-│   TRUST SCORE:  D  (60/100)                                  │
-╰──────────────────────────────────────────────────────────────╯
-  Code Safety     F (0)      43 findings
-  Cve             A (100)     0 findings
-  Guardrails      A (100)     0 findings
-  Permissions     F (0)      34 findings
-  Supply Chain    A (100)     0 findings
-
-  CRITICAL (6) | HIGH (56) | MEDIUM (13) | LOW (2)
-
-  [CRITICAL] Unsafe exec() call
-    pattern | .claude/skills/web-test/scripts/browser.mjs:495
-    exec() executes arbitrary code and should not be used with untrusted input.
-
-  [CRITICAL] Unsafe eval() call
-    pattern | .claude/skills/web-test/scripts/browser.mjs:2805
-    eval() executes arbitrary code and should not be used with untrusted input.
-
-  [HIGH] Destructive file operation — shutil.rmtree
-    permissions | scripts/switch.py:103
-    Recursively deletes directory trees. Dangerous with user-controlled paths.
-
-  ...
-
-  Scan completed in 3.49s
-```
-
----
-
-## Структура JSON-отчёта
-
-```json
-{
-  "repo_url": "https://github.com/user/repo",
-  "overall_score": 60,
-  "overall_grade": "D",
-  "categories": [
-    {
-      "category": "code_safety",
-      "score": 0,
-      "grade": "F",
-      "findings_count": 43,
-      "critical_count": 6,
-      "high_count": 37
-    },
-    {
-      "category": "cve",
-      "score": 100,
-      "grade": "A",
-      "findings_count": 0,
-      "critical_count": 0,
-      "high_count": 0
-    }
-  ],
-  "findings": [
-    {
-      "title": "Unsafe eval() call",
-      "description": "eval() executes arbitrary code and should not be used with untrusted input.",
-      "severity": "critical",
-      "category": "code_safety",
-      "file_path": "scripts/browser.mjs",
-      "line_number": 2805,
-      "analyzer": "pattern",
-      "cve_id": null,
-      "confidence": 1.0
-    }
-  ],
-  "analyzers_used": ["pattern", "guardrails", "permissions", "supply_chain"],
-  "llm_used": false,
-  "scan_duration_seconds": 3.49
-}
-```
-
-**Поля верхнего уровня:**
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `repo_url` | string | URL или путь репозитория |
-| `overall_score` | int | Общий балл 0-100 |
-| `overall_grade` | string | Грейд A/B/C/D/F |
-| `categories` | array | Оценки по категориям |
-| `findings` | array | Все найденные проблемы |
-| `analyzers_used` | array | Запущенные анализаторы |
-| `llm_used` | bool | Был ли LLM-анализ |
-| `scan_duration_seconds` | float | Длительность сканирования |
-
-**Поля findings:**
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `title` | string | Краткое описание |
-| `description` | string | Подробности |
-| `severity` | string | critical/high/medium/low/info |
-| `category` | string | code_safety/cve/guardrails/permissions/supply_chain |
-| `file_path` | string\|null | Относительный путь к файлу |
-| `line_number` | int\|null | Номер строки |
-| `analyzer` | string | Имя анализатора |
-| `cve_id` | string\|null | CVE-ID если применимо |
-| `confidence` | float | 0.0-1.0 (для LLM-находок) |
-
----
-
-## Интеграция с CI/CD
-
-### CLI-флаги для CI
-
-| Флаг | Описание |
-|------|----------|
-| `--threshold N` | Минимальный score (0-100). Exit code 1 если ниже |
-| `--threshold-grade GRADE` | Минимальный грейд (A/B/C/D/F). Exit code 1 если хуже |
-| `--format FORMAT` | Дополнительные форматы: `json`, `codeclimate`, `badge`, `github`, `markdown` (можно указать несколько раз) |
-| `--output-dir DIR` | Директория для артефактов (по умолчанию `.`) |
-| `--markdown-style STYLE` | Детализация Markdown-отчёта: `full` или `summary` |
-
-**Exit codes:** `0` — проверка пройдена, `1` — порог не пройден, `2` — ошибка выполнения.
-
-**Форматы вывода:**
-- `codeclimate` — Code Climate JSON для GitLab Code Quality (файл `gl-code-quality-report.json`)
-- `badge` — shields.io endpoint JSON (файл `badge.json`)
-- `github` — аннотации `::error`/`::warning` для GitHub Actions (в stdout)
-- `markdown` — Markdown-отчёт для PR/MR-комментариев (файл `report.md`)
-
-### GitHub Actions
-
-**Reusable Action** — подключается одной строкой:
-
-```yaml
-- uses: your-org/skills-verified@v1
-  with:
-    threshold: 70
-    threshold-grade: C
-    comment-on-pr: 'true'
-    comment-style: full
-    generate-badge: 'true'
-```
-
-Action автоматически: запускает сканирование, добавляет аннотации в PR, постит Markdown-комментарий, генерирует badge и записывает Job Summary.
-
-Подробнее: [`action.yml`](action.yml) | [Примеры](examples/github-actions/)
-
-### GitLab CI
-
-**Includable Template** — подключается через `include`:
-
-```yaml
-include:
-  - remote: 'https://raw.githubusercontent.com/your-org/skills-verified/main/templates/gitlab-ci-skills-verified.yml'
-
-skills-verified:
-  extends: .skills-verified-pip
-  variables:
-    SV_THRESHOLD: "70"
-    SV_THRESHOLD_GRADE: "C"
-```
-
-Template автоматически: генерирует Code Quality report, постит комментарий в MR, создаёт badge.json.
-
-Подробнее: [`templates/`](templates/) | [Примеры](examples/gitlab-ci/)
-
-### Badge
-
-Добавьте в README вашего проекта:
-
-```markdown
-![Trust Score](https://img.shields.io/endpoint?url=<URL_TO_BADGE_JSON>)
-```
-
-`badge.json` генерируется через `--format badge` и сохраняется как артефакт CI. Разместите его на GitHub Pages, GitLab Pages или любом публичном URL.
-
-### Pre-commit hook
-
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: local
-    hooks:
-      - id: skills-verified
-        name: Skills Verified scan
-        entry: skills-verified . --only pattern,guardrails
-        language: system
-        pass_filenames: false
-```
-
----
-
-## Архитектура
-
-Pipeline с плагинами. Ядро определяет ABC `Analyzer`, каждый анализатор — отдельный модуль с единым контрактом.
-
-### Структура проекта
-
-```
-skills-verified/
-├── src/skills_verified/
-│   ├── cli.py                      # Click CLI, точка входа
-│   ├── core/
-│   │   ├── models.py               # Severity, Category, Grade, Finding, Report
-│   │   ├── analyzer.py             # ABC Analyzer
-│   │   ├── pipeline.py             # Pipeline: запуск анализаторов, сбор findings
-│   │   └── scorer.py               # Scorer: расчёт баллов и грейдов
-│   ├── analyzers/
-│   │   ├── pattern_analyzer.py     # Regex-паттерны
-│   │   ├── cve_analyzer.py         # pip-audit / npm audit
-│   │   ├── bandit_analyzer.py      # Обёртка над Bandit
-│   │   ├── semgrep_analyzer.py     # Обёртка над Semgrep
-│   │   ├── guardrails_analyzer.py  # Prompt injection, jailbreak, unicode
-│   │   ├── permissions_analyzer.py # FS, net, process
-│   │   ├── supply_chain_analyzer.py# Typosquat, postinstall, setup.py
-│   │   └── llm_analyzer.py         # OpenAI-совместимый API
-│   ├── repo/
-│   │   └── fetcher.py              # git clone / локальный путь
-│   └── output/
-│       ├── console.py              # Rich-вывод
-│       └── json_report.py          # JSON-сериализация
-├── tests/
-│   ├── fixtures/fake_repo/         # Тестовый репо с уязвимостями
-│   ├── conftest.py                 # Shared фикстуры pytest
-│   └── test_*.py                   # 83 теста
-├── docs/superpowers/
-│   ├── specs/                      # Design spec
-│   └── plans/                      # Implementation plan
-├── pyproject.toml
-└── README.md
-```
-
-### Поток данных
-
-```
-CLI → fetcher (clone/validate) → Pipeline
-                                    │
-                                    ├─► PatternAnalyzer
-                                    ├─► CveAnalyzer
-                                    ├─► BanditAnalyzer
-                                    ├─► SemgrepAnalyzer      ──► findings
-                                    ├─► GuardrailsAnalyzer
-                                    ├─► PermissionsAnalyzer
-                                    ├─► SupplyChainAnalyzer
-                                    └─► LlmAnalyzer
-                                             │
-                                             ▼
-                                         Scorer → CategoryScores
-                                             │
-                                             ▼
-                                          Report
-                                             │
-                        ┌────────────────────┴────────────────────┐
-                        ▼                                          ▼
-                 console.render_report                   json_report.save
-```
-
-### Контракт Analyzer
-
-```python
-class Analyzer(ABC):
-    name: str
-
-    @abstractmethod
-    def is_available(self) -> bool:
-        """True если анализатор может работать (инструменты установлены)."""
-
-    @abstractmethod
-    def analyze(self, repo_path: Path) -> list[Finding]:
-        """Запускает анализ, возвращает список находок."""
-```
-
-**Правила:**
-- `is_available() == False` → анализатор пропускается с предупреждением в лог
-- Исключения внутри `analyze()` ловятся Pipeline, логируются, возвращается `[]`
-- Анализаторы запускаются последовательно (параллельный запуск — будущая оптимизация)
-
-### Добавление нового анализатора
-
-1. Создать `src/skills_verified/analyzers/my_analyzer.py`:
-   ```python
-   from pathlib import Path
-   from skills_verified.core.analyzer import Analyzer
-   from skills_verified.core.models import Category, Finding, Severity
-
-   class MyAnalyzer(Analyzer):
-       name = "my_analyzer"
-
-       def is_available(self) -> bool:
-           return True
-
-       def analyze(self, repo_path: Path) -> list[Finding]:
-           # ... your logic
-           return []
-   ```
-
-2. Добавить в `cli.py` в список `all_analyzers`
-3. Написать тесты в `tests/test_my_analyzer.py`
-
----
+## CI
+
+[`action.yml`](action.yml) запускает тот же CLI и возвращает `report-path`,
+`scan-status` и `findings-count`. Примеры для GitHub Actions и GitLab CI находятся
+в [`examples/`](examples/). Они сохраняют JSON, но не принимают решение о
+публикации.
 
 ## Разработка
 
-### Запуск тестов
-
 ```bash
-# Все тесты
+python -m pip install -e ".[dev,scanners]"
 pytest tests/ -v
-
-# Конкретный анализатор
-pytest tests/test_pattern_analyzer.py -v
-
-# С покрытием
 pytest tests/ --cov=skills_verified --cov-report=term-missing
-
-# Только быстрые (без интеграционных)
-pytest tests/ -v --ignore=tests/test_integration.py
-```
-
-### Линтинг
-
-```bash
 ruff check src/ tests/
-ruff format src/ tests/
+ruff format --check src/ tests/
 ```
 
-### TDD workflow
+Новый анализатор наследует `Analyzer`, задаёт стабильное lowercase-имя, возвращает
+`Finding` и регистрируется в `cli.py`. Тесты должны проверять location, evidence,
+diagnostics и analyzer run status. Правила разработки описаны в
+[AGENTS.md](AGENTS.md).
 
-Проект следует TDD — тесты пишутся перед имплементацией. Пример добавления паттерна в `pattern_analyzer.py`:
+## Безопасность и ограничения
 
-```bash
-# 1. Добавить тест
-vim tests/test_pattern_analyzer.py
+Репозиторий считается недоверенным. Scanner не исполняет его scripts и не запускает
+dependency resolver. Pinned Python/npm dependencies разбираются статически, а OSV
+получает только ecosystem, package name и version.
 
-# 2. Убедиться, что он падает
-pytest tests/test_pattern_analyzer.py::test_new_pattern -v
+Основные лимиты:
 
-# 3. Добавить паттерн в PATTERNS list
-vim src/skills_verified/analyzers/pattern_analyzer.py
+- acquisition: 120 секунд, shallow clone и 128 MiB оценочного места по умолчанию
+  (`--clone-timeout` и `--max-clone-mib` позволяют явно поднять лимиты);
+- inventory: 10 000 файлов и 50 MiB суммарно по умолчанию; отдельного лимита на
+  один файл нет (`--max-scan-mib` позволяет явно поднять общий бюджет до
+  1024 MiB), 10 секунд;
+- CVE: 10 000 manifest records и 1 000 dependencies; найденные OSV records
+  обогащаются параллельно без искусственного лимита на detail-запросы;
+- LLM: сегменты до 50 000 символов, все batch по умолчанию, 30 секунд на запрос,
+  опциональный общий deadline и до 100 findings на batch.
 
-# 4. Убедиться, что тест проходит
-pytest tests/test_pattern_analyzer.py::test_new_pattern -v
+Внутренние symlink aliases покрываются через их каноническую цель; внешние,
+битые и ведущие в исключённые каталоги ссылки отклоняются. Special files не
+анализируются, обычные файлы копируются в отдельный временный workspace, а внешние
+workers имеют собственные deadlines и size limits. Dynamic
+sandbox execution, подписи, attestation и публикационная политика не входят в core.
 
-# 5. Запустить всю сьют
-pytest tests/ -v
-```
-
-### Тестовый репо
-
-`tests/fixtures/fake_repo/` содержит файлы с намеренно уязвимым кодом:
-- `dangerous.py` — eval, exec, shell=True, hardcoded secrets, pickle.load
-- `clean.py` — безопасный код (для проверки отсутствия ложных срабатываний)
-- `package.json` — typosquat + suspicious postinstall
-- `setup.py` — os.system при установке
-- `skill_inject.md` — prompt injection паттерны
-- `requirements.txt` — зависимости для CVE-анализа
-
----
-
-## FAQ
-
-**Q: Почему мой код помечен как HIGH, хотя он безопасен?**
-
-A: Паттерн-анализаторы работают на регулярках — они могут давать false positives. Используй `--skip pattern` или добавь проверку вручную. Для семантического анализа используй `--only llm` с LLM-ключом.
-
-**Q: Можно ли добавить свой список "популярных пакетов" для typosquatting?**
-
-A: Пока нет, списки захардкожены в `supply_chain_analyzer.py`. Это несложно расширить — можно добавить чтение из YAML/JSON-файла.
-
-**Q: LLM-анализатор требует OpenAI?**
-
-A: Нет, любой OpenAI-совместимый API подойдёт: Ollama, vLLM, LM Studio, llama.cpp server, локальные прокси. Тестировалось с OpenAI API, но совместимость должна работать везде.
-
-**Q: Сколько стоит LLM-анализ?**
-
-A: Зависит от размера репо и модели. Для GPT-4o средний репо (~50 файлов, ~200KB кода) — примерно $0.05-0.20. Для локальной модели через Ollama — бесплатно.
-
-**Q: Trust Score слишком строгий, мой репо получил F.**
-
-A: Веса штрафов и границы грейдов захардкожены в `scorer.py`. Их можно настроить под свой контекст. В будущей версии планируется поддержка конфига.
-
-**Q: Как исключить папку `tests/` или `vendor/` из сканирования?**
-
-A: Пока нет встроенной поддержки исключений. Как workaround — клонируй репо вручную, удали ненужные папки, запусти на локальном пути.
-
-**Q: Поддерживается ли git-submodules?**
-
-A: Клонирование делается с `depth=1`, submodules не подтягиваются. Если нужно — сделай `git clone --recurse-submodules` вручную и передай локальный путь.
-
----
-
-## Лицензия
-
-MIT
+Актуальная спецификация: [policy-free scan report roadmap](docs/superpowers/specs/2026-07-13-policy-free-scan-report-roadmap.md).

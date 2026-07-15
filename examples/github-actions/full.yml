@@ -1,84 +1,50 @@
-name: Security Scan (Full)
+name: Skill security analysis
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
 
 jobs:
-  trust-scan:
+  scan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Run Skills Verified
         id: scan
-        uses: your-org/skills-verified@v1
+        uses: Emilmeister/Skills-Verified@main
         with:
           source: .
-          threshold: 75
-          threshold-grade: C
-          comment-on-pr: true
-          comment-style: full
-          generate-badge: true
-          python-version: "3.11"
-          # Optionally skip slow analyzers:
-          # skip: llm
-          # Or run only specific analyzers:
-          # only: pattern,guardrails,permissions
+          python-version: '3.11'
+          skip: llm
+          # Use a comma-separated allowlist when a consumer requires a fixed scope:
+          # only: pattern,guardrails,permissions,mcp
 
-      - name: Upload trust report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: trust-report
-          path: report.json
-
-      - name: Upload badge
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: trust-badge
-          path: badge.json
-
-      - name: Print scan summary
-        if: always()
+      - name: Inspect technical report
+        if: always() && steps.scan.outputs.report-path != ''
+        env:
+          REPORT_PATH: ${{ steps.scan.outputs.report-path }}
         run: |
-          echo "Trust Score : ${{ steps.scan.outputs.score }}"
-          echo "Grade       : ${{ steps.scan.outputs.grade }}"
-          echo "Passed      : ${{ steps.scan.outputs.passed }}"
+          python - <<'PY'
+          import json
+          import os
 
-  # ── Docker variant (faster, all scanners pre-installed) ──────────────────
-  # Uncomment the job below to use the Docker-based runner instead of pip.
-  #
-  # trust-scan-docker:
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     pull-requests: write
-  #
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Run Skills Verified (Docker)
-  #       id: scan
-  #       uses: your-org/skills-verified@v1
-  #       with:
-  #         source: .
-  #         threshold: 75
-  #         threshold-grade: C
-  #         use-docker: true
-  #         comment-on-pr: true
-  #         comment-style: full
-  #         generate-badge: true
-  #
-  #     - name: Upload trust report
-  #       uses: actions/upload-artifact@v4
-  #       if: always()
-  #       with:
-  #         name: trust-report-docker
-  #         path: report.json
+          with open(os.environ["REPORT_PATH"], encoding="utf-8") as report_file:
+              report = json.load(report_file)
+          print(json.dumps({
+              "status": report["scan"]["status"],
+              "findings": report["findings"],
+              "analyzer_runs": report["analyzer_runs"],
+          }, indent=2))
+          PY
+
+      - name: Upload policy-free report
+        if: always() && steps.scan.outputs.report-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: skills-verified-report
+          path: ${{ steps.scan.outputs.report-path }}
+          if-no-files-found: error
