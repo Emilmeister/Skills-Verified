@@ -1,0 +1,1441 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Skills Verified — просмотр отчёта</title>
+  <style>
+    :root {
+      --bg: #08110f;
+      --bg-soft: #0c1815;
+      --surface: rgba(18, 32, 28, 0.86);
+      --surface-solid: #12201c;
+      --surface-raised: #172923;
+      --border: rgba(190, 225, 207, 0.13);
+      --border-strong: rgba(190, 225, 207, 0.24);
+      --text: #edf7f1;
+      --muted: #98aba2;
+      --muted-strong: #bdcbc4;
+      --accent: #69e5aa;
+      --accent-strong: #35c98b;
+      --accent-soft: rgba(105, 229, 170, 0.12);
+      --critical: #ff6480;
+      --high: #ff9c66;
+      --medium: #f4ca64;
+      --low: #70b9ff;
+      --info: #8c9caf;
+      --unknown: #75837d;
+      --success: #69e5aa;
+      --warning: #f4ca64;
+      --danger: #ff6480;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html { min-width: 320px; background: var(--bg); }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 4%, rgba(69, 208, 151, 0.13), transparent 28rem),
+        radial-gradient(circle at 88% 18%, rgba(75, 130, 111, 0.1), transparent 32rem),
+        linear-gradient(180deg, #091410 0%, var(--bg) 55%, #070d0c 100%);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    button, input, select { font: inherit; }
+    button, label[for] { -webkit-tap-highlight-color: transparent; }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    summary:focus-visible,
+    label[for]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .shell { width: min(1480px, calc(100% - 40px)); margin: 0 auto; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(190, 225, 207, 0.08);
+      background: rgba(8, 17, 15, 0.78);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar-inner {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #07110d;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #9af2c5, #45d093);
+      box-shadow: 0 10px 30px rgba(69, 208, 147, 0.2);
+    }
+
+    .brand-mark svg { width: 21px; height: 21px; }
+    .brand-name { font-size: 15px; font-weight: 760; letter-spacing: -0.01em; }
+    .brand-subtitle { color: var(--muted); font-size: 12px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+    .button {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: 11px;
+      color: var(--text);
+      background: rgba(22, 40, 34, 0.72);
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+    }
+
+    .button:hover { transform: translateY(-1px); border-color: rgba(105, 229, 170, 0.45); }
+    .button-primary { color: #07110d; border-color: transparent; background: var(--accent); font-weight: 720; }
+    .button-primary:hover { background: #82edba; }
+    .button svg { width: 16px; height: 16px; }
+
+    main { padding: 42px 0 80px; }
+
+    .empty-state {
+      min-height: calc(100vh - 190px);
+      display: grid;
+      place-items: center;
+    }
+
+    .drop-card {
+      width: min(720px, 100%);
+      padding: 58px 44px;
+      text-align: center;
+      border: 1px dashed rgba(105, 229, 170, 0.35);
+      border-radius: 30px;
+      background:
+        linear-gradient(145deg, rgba(22, 42, 35, 0.78), rgba(12, 24, 21, 0.9)),
+        var(--surface);
+      box-shadow: var(--shadow);
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .drop-card:hover,
+    body.is-dragging .drop-card {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+      background: linear-gradient(145deg, rgba(27, 52, 43, 0.92), rgba(12, 24, 21, 0.96));
+    }
+
+    .drop-icon {
+      width: 76px;
+      height: 76px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 24px;
+      color: var(--accent);
+      border: 1px solid rgba(105, 229, 170, 0.28);
+      border-radius: 24px;
+      background: var(--accent-soft);
+    }
+
+    .drop-icon svg { width: 34px; height: 34px; }
+    .drop-card h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.045em; }
+    .drop-card p { max-width: 540px; margin: 16px auto 28px; color: var(--muted-strong); font-size: 16px; }
+    .privacy-note { display: block; margin-top: 20px; color: var(--muted); font-size: 12px; }
+
+    .error-box {
+      max-width: 560px;
+      margin: 22px auto 0;
+      padding: 13px 16px;
+      color: #ffc4ce;
+      border: 1px solid rgba(255, 100, 128, 0.32);
+      border-radius: 12px;
+      background: rgba(255, 100, 128, 0.09);
+      text-align: left;
+    }
+
+    .dashboard { display: grid; gap: 22px; }
+
+    .report-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 30px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, rgba(24, 46, 38, 0.92), rgba(12, 25, 21, 0.9));
+      box-shadow: var(--shadow);
+    }
+
+    .report-hero::after {
+      content: "";
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      right: -110px;
+      top: -190px;
+      border-radius: 50%;
+      background: rgba(105, 229, 170, 0.08);
+      filter: blur(4px);
+      pointer-events: none;
+    }
+
+    .hero-row { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 30px; align-items: flex-start; }
+    .eyebrow { margin-bottom: 10px; color: var(--accent); font-size: 11px; font-weight: 780; letter-spacing: 0.14em; text-transform: uppercase; }
+    .source-title { max-width: 900px; margin: 0; overflow-wrap: anywhere; font-size: clamp(24px, 4vw, 38px); line-height: 1.14; letter-spacing: -0.035em; }
+    .source-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 15px; color: var(--muted); font-size: 13px; }
+    .source-meta span { display: inline-flex; align-items: center; gap: 7px; }
+
+    .status-chip,
+    .severity-chip,
+    .mini-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .status-chip { padding: 9px 13px; border: 1px solid currentColor; background: rgba(255, 255, 255, 0.035); font-size: 12px; }
+    .status-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 13%, transparent); }
+    .status-complete, .status-completed { color: var(--success); }
+    .status-partial { color: var(--warning); }
+    .status-failed { color: var(--danger); }
+    .status-skipped { color: var(--info); }
+
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .metric-card { min-height: 142px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+    .metric-label { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .metric-value { margin-top: 12px; font-size: clamp(28px, 4vw, 42px); font-weight: 780; line-height: 1; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+    .metric-caption { margin-top: 11px; color: var(--muted); font-size: 12px; }
+    .metric-card.is-danger .metric-value { color: var(--critical); }
+
+    .panel { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.16); }
+    .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 24px; border-bottom: 1px solid var(--border); }
+    .panel-title { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+    .panel-subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .panel-body { padding: 22px 24px; }
+
+    .severity-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; }
+    .severity-bar { height: 14px; display: flex; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.055); }
+    .severity-segment { min-width: 2px; height: 100%; }
+    .severity-segment:first-child { border-radius: 999px 0 0 999px; }
+    .severity-segment:last-child { border-radius: 0 999px 999px 0; }
+    .severity-critical { background: var(--critical); }
+    .severity-high { background: var(--high); }
+    .severity-medium { background: var(--medium); }
+    .severity-low { background: var(--low); }
+    .severity-info { background: var(--info); }
+    .severity-unknown { background: var(--unknown); }
+    .severity-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 16px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; color: var(--muted-strong); font-size: 12px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .legend-item strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+    .donut {
+      width: 90px;
+      height: 90px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: conic-gradient(var(--unknown) 0 100%);
+    }
+
+    .donut::before { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--surface-solid); }
+    .donut-value { position: relative; z-index: 1; font-size: 19px; font-weight: 780; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 0.75fr); gap: 22px; align-items: start; }
+    .sidebar { display: grid; gap: 22px; }
+
+    .filters { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, 0.7fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+    .field { min-width: 0; }
+    .field label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .field input,
+    .field select {
+      width: 100%;
+      height: 42px;
+      padding: 0 13px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0e1b17;
+    }
+
+    .field input::placeholder { color: #6f8279; }
+    .result-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .finding-list { display: grid; gap: 10px; padding: 14px; }
+
+    .finding-card { overflow: hidden; border: 1px solid var(--border); border-left: 3px solid var(--unknown); border-radius: 13px; background: rgba(9, 19, 16, 0.55); }
+    .finding-card[data-severity="critical"] { border-left-color: var(--critical); }
+    .finding-card[data-severity="high"] { border-left-color: var(--high); }
+    .finding-card[data-severity="medium"] { border-left-color: var(--medium); }
+    .finding-card[data-severity="low"] { border-left-color: var(--low); }
+    .finding-card[data-severity="info"] { border-left-color: var(--info); }
+    .finding-card details[open] { background: rgba(20, 37, 31, 0.52); }
+    .finding-card summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 17px 18px; cursor: pointer; list-style: none; }
+    .finding-card summary::-webkit-details-marker { display: none; }
+    .finding-card summary:hover { background: rgba(105, 229, 170, 0.035); }
+    .finding-heading { min-width: 0; }
+    .finding-title-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .finding-title { overflow: hidden; color: var(--text); font-size: 14px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+    .finding-meta { display: flex; flex-wrap: wrap; gap: 6px 13px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .finding-side { display: flex; align-items: center; gap: 10px; }
+    .finding-location { max-width: 310px; overflow: hidden; color: var(--muted-strong); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .chevron { width: 18px; height: 18px; color: var(--muted); transition: transform 160ms ease; }
+    details[open] > summary .chevron { transform: rotate(180deg); }
+
+    .severity-chip { padding: 4px 8px; font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .severity-chip[data-severity="critical"] { color: #ff9aaa; background: rgba(255, 100, 128, 0.13); }
+    .severity-chip[data-severity="high"] { color: #ffc09b; background: rgba(255, 156, 102, 0.13); }
+    .severity-chip[data-severity="medium"] { color: #ffe49a; background: rgba(244, 202, 100, 0.13); }
+    .severity-chip[data-severity="low"] { color: #a9d5ff; background: rgba(112, 185, 255, 0.13); }
+    .severity-chip[data-severity="info"],
+    .severity-chip[data-severity="unknown"] { color: #bcc7d1; background: rgba(140, 156, 175, 0.12); }
+
+    .finding-body { padding: 0 18px 19px; border-top: 1px solid var(--border); }
+    .finding-description { margin: 17px 0; color: var(--muted-strong); white-space: pre-wrap; }
+    .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .detail-cell { min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: rgba(5, 13, 11, 0.38); }
+    .detail-label { color: var(--muted); font-size: 9px; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+    .detail-value { margin-top: 5px; overflow: hidden; color: var(--muted-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .subsection { margin-top: 16px; }
+    .subsection-title { margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
+
+    pre {
+      max-width: 100%;
+      margin: 0;
+      overflow: auto;
+      padding: 14px;
+      color: #d9f6e8;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: #07110e;
+      font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .verification-box { padding: 14px; border: 1px solid var(--border); border-radius: 11px; background: rgba(105, 229, 170, 0.035); }
+    .verification-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .verification-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+    .verification-metrics span { padding: 8px; color: var(--muted); border-radius: 8px; background: rgba(255, 255, 255, 0.03); font-size: 10px; text-align: center; }
+    .verification-metrics strong { display: block; color: var(--text); font-size: 15px; }
+    .verification-corroborated { color: var(--success); }
+    .verification-disputed { color: var(--danger); }
+    .verification-unverified { color: var(--warning); }
+    .hash-details { margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .hash-details summary { cursor: pointer; }
+    .hash-list { display: grid; gap: 5px; margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+
+    .reference-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
+    .reference-list a, .reference-list span { display: inline-block; max-width: 100%; overflow: hidden; padding: 5px 8px; color: var(--accent); border: 1px solid var(--border); border-radius: 7px; background: rgba(105, 229, 170, 0.04); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+    .run-list { display: grid; gap: 8px; }
+    .run-item { padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: rgba(6, 14, 12, 0.34); }
+    .run-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .run-name { min-width: 0; overflow: hidden; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+    .run-status { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--info); }
+    .run-status.status-completed { background: var(--success); }
+    .run-status.status-partial { background: var(--warning); }
+    .run-status.status-failed { background: var(--danger); }
+    .run-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .run-reason { margin-top: 7px; color: var(--muted-strong); font-size: 10px; overflow-wrap: anywhere; }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .mini-chip { max-width: 100%; overflow: hidden; padding: 5px 8px; color: var(--muted-strong); border: 1px solid var(--border); background: rgba(255, 255, 255, 0.025); font-size: 10px; text-overflow: ellipsis; }
+    .scope-group + .scope-group { margin-top: 18px; }
+    .scope-label { margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+    .scope-kv { display: grid; gap: 9px; }
+    .scope-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; color: var(--muted); font-size: 10px; }
+    .scope-row strong { overflow: hidden; color: var(--muted-strong); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+
+    .diagnostic-list { display: grid; gap: 9px; }
+    .diagnostic-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(7, 16, 13, 0.38); }
+    .diagnostic-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--info); background: rgba(140, 156, 175, 0.1); font-weight: 800; }
+    .diagnostic-item[data-level="warning"] .diagnostic-icon { color: var(--warning); background: rgba(244, 202, 100, 0.1); }
+    .diagnostic-item[data-level="error"] .diagnostic-icon { color: var(--danger); background: rgba(255, 100, 128, 0.1); }
+    .diagnostic-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+    .diagnostic-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 650; }
+    .diagnostic-context { color: var(--muted); font-size: 10px; }
+    .diagnostic-message { margin-top: 5px; color: var(--muted-strong); font-size: 12px; }
+    .diagnostic-details { margin-top: 8px; color: var(--muted); font-size: 10px; }
+    .diagnostic-details summary { cursor: pointer; }
+    .diagnostic-details pre { margin-top: 8px; font-size: 10px; }
+
+    .list-empty { padding: 48px 20px; color: var(--muted); text-align: center; }
+    .render-note { padding: 11px 14px; color: var(--warning); border: 1px solid rgba(244, 202, 100, 0.2); border-radius: 10px; background: rgba(244, 202, 100, 0.06); font-size: 11px; }
+
+    .drop-overlay {
+      position: fixed;
+      inset: 18px;
+      z-index: 100;
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      border: 2px dashed var(--accent);
+      border-radius: 24px;
+      background: rgba(7, 16, 13, 0.9);
+      backdrop-filter: blur(12px);
+      font-size: 20px;
+      font-weight: 760;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.99);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    body.is-dragging .drop-overlay { opacity: 1; transform: scale(1); }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 120;
+      max-width: min(430px, calc(100% - 44px));
+      padding: 13px 16px;
+      color: #ffd0d8;
+      border: 1px solid rgba(255, 100, 128, 0.35);
+      border-radius: 12px;
+      background: #351820;
+      box-shadow: var(--shadow);
+    }
+
+    /* Light, report-first layout inspired by the supplied platform dashboard. */
+    :root {
+      color-scheme: light;
+      --bg: #eef0f5;
+      --bg-soft: #f5f6f9;
+      --surface: #ffffff;
+      --surface-solid: #ffffff;
+      --surface-raised: #f7f8fb;
+      --border: #d9dee9;
+      --border-strong: #cbd2df;
+      --text: #3f4350;
+      --muted: #838997;
+      --muted-strong: #606675;
+      --accent: #558f6d;
+      --accent-strong: #397a56;
+      --accent-soft: #e7f2ea;
+      --critical: #bd4b45;
+      --high: #ec8c40;
+      --medium: #ddb23e;
+      --low: #6caf6d;
+      --info: #6e87a8;
+      --unknown: #9ba1ad;
+      --success: #62aa66;
+      --warning: #d5aa38;
+      --danger: #bd4b45;
+      --shadow: 0 1px 2px rgba(35, 41, 54, 0.04);
+      --radius-lg: 12px;
+      --radius-md: 10px;
+      --radius-sm: 8px;
+    }
+
+    html { background: var(--bg); }
+    body { color: var(--text); background: var(--bg); font-size: 14px; }
+    .shell { width: min(1880px, calc(100% - 32px)); }
+
+    .topbar {
+      position: static;
+      border-bottom: 0;
+      background: transparent;
+      backdrop-filter: none;
+    }
+    .topbar-inner { min-height: 64px; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      color: #fff;
+      border-radius: 9px;
+      background: #576175;
+      box-shadow: none;
+    }
+    .brand-name { color: #343844; font-size: 16px; }
+    .brand-subtitle { color: var(--muted); }
+    .button {
+      min-height: 38px;
+      color: var(--text);
+      border-color: var(--border-strong);
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .button:hover { border-color: #aeb7c5; background: #f8f9fb; }
+    .button-primary { color: #fff; border-color: #576175; background: #576175; }
+    .button-primary:hover { color: #fff; border-color: #465064; background: #465064; }
+
+    main { padding: 8px 0 64px; }
+    .empty-state { min-height: calc(100vh - 120px); }
+    .drop-card {
+      border: 1px dashed #b8c0ce;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .drop-card:hover,
+    body.is-dragging .drop-card { border-color: #7d899b; background: #fff; }
+    .drop-icon { color: #576175; border-color: #d6dbe4; border-radius: 16px; background: #f1f3f7; }
+    .drop-card h1 { color: #343844; font-size: clamp(28px, 4vw, 40px); }
+
+    .dashboard { gap: 14px; }
+    .report-hero {
+      padding: 4px 2px 14px;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .report-hero::after { display: none; }
+    .hero-row { align-items: center; }
+    .eyebrow { margin-bottom: 7px; color: var(--muted); letter-spacing: 0.04em; text-transform: none; }
+    .source-title { color: #3b3f4b; font-size: clamp(20px, 3vw, 27px); letter-spacing: -0.02em; }
+    .source-meta { margin-top: 9px; color: var(--muted); }
+    .status-chip { padding: 7px 11px; border-color: var(--border-strong); background: #fff; }
+
+    .workspace { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 20px; }
+    .sidebar, .main-column { display: grid; align-content: start; gap: 16px; }
+    .panel { border-color: var(--border); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow); }
+    .panel-header { padding: 17px 18px; border-color: #e2e6ed; }
+    .panel-title { color: #414550; font-size: 15px; }
+    .panel-subtitle { color: var(--muted); }
+    .panel-body { padding: 18px; }
+
+    .summary-panel .panel-body { padding: 20px; }
+    .summary-donut-row { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+    .summary-title { color: #414550; font-size: 16px; font-weight: 750; }
+    .donut { width: 112px; height: 112px; box-shadow: inset 0 0 0 1px rgba(58, 65, 78, 0.04); }
+    .donut::before { inset: 11px; background: #fff; }
+    .donut-value { color: #414550; font-size: 24px; }
+    .severity-bar { height: 7px; margin-top: 6px; background: #edf0f4; }
+    .severity-legend { gap: 8px 13px; margin-top: 12px; }
+    .legend-item { color: var(--muted); font-size: 10px; }
+    .legend-item strong { color: var(--text); }
+
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+    .metric-card { min-height: 76px; padding: 11px; border-color: var(--border); border-radius: 9px; background: #fafbfc; }
+    .metric-label { color: var(--muted); font-size: 9px; letter-spacing: 0.03em; }
+    .metric-value { margin-top: 6px; color: #414550; font-size: 21px; }
+    .metric-caption { margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .metric-card.is-danger .metric-value { color: var(--critical); }
+
+    .section-label { margin: 1px 1px 9px; color: #777e8d; font-size: 12px; font-weight: 700; }
+    .category-list { display: grid; gap: 8px; }
+    .category-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      min-height: 66px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .category-count {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      color: var(--unknown);
+      border: 4px solid currentColor;
+      border-right-color: #e4e7ed;
+      border-radius: 50%;
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+    .category-item[data-severity="critical"] .category-count { color: var(--critical); }
+    .category-item[data-severity="high"] .category-count { color: var(--high); }
+    .category-item[data-severity="medium"] .category-count { color: var(--medium); }
+    .category-item[data-severity="low"] .category-count { color: var(--low); }
+    .category-name { overflow: hidden; color: #484c58; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .category-caption { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .category-analyzers { max-width: 92px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+    .filters { grid-template-columns: minmax(210px, 1.4fr) repeat(3, minmax(125px, .7fr)); gap: 8px; padding: 11px 14px; border-color: #e2e6ed; background: #f6f7fa; }
+    .field input,
+    .field select { height: 38px; color: var(--text); border-color: var(--border); border-radius: 999px; background: #fff; }
+    .field input::placeholder { color: #9aa0ab; }
+    .finding-list { gap: 9px; padding: 11px; background: #f3f4f7; }
+    .finding-card { border: 1px solid var(--border); border-left-width: 1px; border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+    .finding-card details[open] { background: #fff; }
+    .finding-card summary { padding: 14px 15px 12px; }
+    .finding-card summary:hover { background: #fafbfc; }
+    .finding-title { color: #444853; font-size: 14px; }
+    .finding-meta { color: var(--muted); font-size: 10px; }
+    .finding-location { max-width: 430px; color: #6e7482; }
+    .severity-chip { padding: 5px 8px; border-radius: 5px; color: #fff !important; font-size: 9px; }
+    .severity-chip[data-severity="critical"] { background: var(--critical); }
+    .severity-chip[data-severity="high"] { background: var(--high); }
+    .severity-chip[data-severity="medium"] { background: var(--medium); }
+    .severity-chip[data-severity="low"] { background: var(--low); }
+    .severity-chip[data-severity="info"],
+    .severity-chip[data-severity="unknown"] { background: var(--info); }
+    .finding-body { padding: 0 15px 15px; border-color: #e5e8ee; }
+    .finding-description { color: #555b68; }
+    .detail-cell { border-color: #e0e4eb; background: #f8f9fb; }
+    .detail-label { color: var(--muted); }
+    .detail-value { color: #5e6471; }
+    pre { color: #3f4652; border-color: #dce1e8; background: #f6f7f9; }
+    .verification-box { border-color: #dce1e8; background: #f7faf8; }
+    .verification-metrics span { background: #eef2ef; }
+    .reference-list a, .reference-list span { color: var(--accent-strong); background: #f4f8f5; }
+
+    .run-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .run-item { border-color: #e0e4eb; background: #fafbfc; }
+    .mini-chip { color: #626977; border-color: #dce1e8; background: #f7f8fa; }
+    .diagnostic-item { border-color: #e0e4eb; background: #fafbfc; }
+    .diagnostic-message { color: #5d6370; }
+    .drop-overlay { color: #fff; border-color: #687589; background: rgba(65, 72, 85, .9); }
+    .toast { color: #7b302c; border-color: #dfaaa6; background: #fff2f1; }
+
+    @media (max-width: 1100px) {
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .run-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 700px) {
+      .shell { width: min(100% - 24px, 1480px); }
+      .topbar-inner { min-height: 64px; }
+      .brand-subtitle, #printButton span { display: none; }
+      .topbar-actions .button { padding: 0 12px; }
+      main { padding-top: 22px; }
+      .drop-card { padding: 42px 22px; border-radius: 22px; }
+      .report-hero { padding: 22px; }
+      .hero-row { display: grid; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .metric-card { min-height: 122px; padding: 16px; }
+      .metric-value { font-size: 30px; }
+      .severity-layout { grid-template-columns: 1fr; }
+      .donut { display: none; }
+      .filters { grid-template-columns: 1fr; padding: 14px; }
+      .panel-header, .panel-body { padding: 18px; }
+      .finding-card summary { grid-template-columns: 1fr; }
+      .finding-side { justify-content: space-between; }
+      .finding-location { max-width: calc(100vw - 100px); }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .verification-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sidebar { grid-template-columns: 1fr; }
+      .run-list { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 430px) {
+      .metrics { grid-template-columns: 1fr; }
+      .topbar-actions .button:not(.button-primary) { display: none; }
+    }
+
+    @media print {
+      :root { color-scheme: light; --bg: #fff; --surface: #fff; --surface-solid: #fff; --surface-raised: #fff; --border: #dce3df; --text: #15201b; --muted: #65736b; --muted-strong: #34473d; }
+      body { background: #fff; color: var(--text); }
+      .topbar, .filters, .drop-overlay, .toast { display: none !important; }
+      main { padding: 0; }
+      .shell { width: 100%; }
+      .report-hero, .panel, .metric-card { box-shadow: none; break-inside: avoid; }
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { grid-template-columns: 1fr 1fr; }
+      .finding-card details:not([open]) .finding-body { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3 19 6v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3Z"/>
+            <path d="m9 12 2 2 4-5"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">Безопасность</div>
+          <div class="brand-subtitle">Skills Verified · просмотр отчёта</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="printButton" class="button" type="button" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+          <span>Печать / PDF</span>
+        </button>
+        <label class="button button-primary" for="fileInput" tabindex="0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M5 20h14"/></svg>
+          Выбрать JSON
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <input id="fileInput" type="file" accept=".json,application/json" hidden>
+
+  <main class="shell">
+    <section id="emptyState" class="empty-state">
+      <div class="drop-card" id="dropCard">
+        <div class="drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+            <path d="M14 2v6h6M8 13h8M8 17h5"/>
+          </svg>
+        </div>
+        <h1>Откройте отчёт<br>без лишнего шума</h1>
+        <p>Перетащите JSON-отчёт Skills Verified сюда или выберите файл. Viewer покажет scope, findings, анализаторы и diagnostics без собственных score и verdict.</p>
+        <label class="button button-primary" for="fileInput" tabindex="0">Выбрать файл отчёта</label>
+        <small class="privacy-note">Файл обрабатывается локально в браузере и никуда не отправляется.</small>
+        <div id="emptyError" class="error-box" role="alert" hidden></div>
+      </div>
+    </section>
+
+    <section id="dashboard" class="dashboard" hidden>
+      <section class="report-hero">
+        <div class="hero-row">
+          <div>
+            <div class="eyebrow" id="reportFileName">Отчёт</div>
+            <h1 class="source-title" id="sourceTitle"></h1>
+            <div class="source-meta" id="sourceMeta"></div>
+          </div>
+          <span class="status-chip" id="scanStatus"></span>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <section class="panel summary-panel">
+            <div class="panel-body">
+              <div class="summary-donut-row">
+                <div class="donut" id="severityDonut"><span class="donut-value" id="donutValue"></span></div>
+                <div>
+                  <div class="summary-title">Находки отчёта</div>
+                  <div class="panel-subtitle">Фактические данные без score и verdict</div>
+                </div>
+              </div>
+              <div class="severity-bar" id="severityBar" aria-label="Распределение findings"></div>
+              <div class="severity-legend" id="severityLegend"></div>
+              <section class="metrics" id="metrics" aria-label="Ключевые показатели"></section>
+            </div>
+          </section>
+
+          <section class="category-section">
+            <h2 class="section-label">Категории</h2>
+            <div class="category-list" id="categoryList"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Scope и provenance</h2>
+                <div class="panel-subtitle">Что именно было проверено</div>
+              </div>
+            </div>
+            <div class="panel-body" id="scopePanel"></div>
+          </section>
+        </aside>
+
+        <div class="main-column">
+          <section class="panel findings-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Уязвимости и сигналы</h2>
+                <div class="panel-subtitle">Нажмите на карточку, чтобы свернуть evidence и remediation</div>
+              </div>
+              <div class="result-count" id="findingCount"></div>
+            </div>
+            <div class="filters">
+              <div class="field">
+                <label for="searchInput">Поиск</label>
+                <input id="searchInput" type="search" placeholder="Поиск по названию, пути или rule ID">
+              </div>
+              <div class="field">
+                <label for="severityFilter">Severity</label>
+                <select id="severityFilter"></select>
+              </div>
+              <div class="field">
+                <label for="analyzerFilter">Анализатор</label>
+                <select id="analyzerFilter"></select>
+              </div>
+              <div class="field">
+                <label for="verificationFilter">Verification</label>
+                <select id="verificationFilter">
+                  <option value="">Любая verification</option>
+                  <option value="corroborated">Corroborated</option>
+                  <option value="disputed">Disputed</option>
+                  <option value="unverified">Unverified</option>
+                  <option value="deterministic">Без LLM verification</option>
+                </select>
+              </div>
+            </div>
+            <div class="finding-list" id="findingList"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Analyzer runs</h2>
+                <div class="panel-subtitle" id="runSummary"></div>
+              </div>
+            </div>
+            <div class="panel-body"><div class="run-list" id="runList"></div></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Diagnostics</h2>
+                <div class="panel-subtitle">Ограничения, частичные проверки и технические события</div>
+              </div>
+              <div class="result-count" id="diagnosticCount"></div>
+            </div>
+            <div class="panel-body">
+              <div class="diagnostic-list" id="diagnosticList"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="drop-overlay" aria-hidden="true">Отпустите JSON-отчёт</div>
+  <div class="toast" id="toast" role="alert" hidden></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const MAX_FILE_BYTES = 50 * 1024 * 1024;
+      const MAX_RENDERED_FINDINGS = 500;
+      const severityOrder = ["critical", "high", "medium", "low", "info", "unknown"];
+      const severityWeight = Object.fromEntries(severityOrder.map((value, index) => [value, severityOrder.length - index]));
+      const severityLabels = {
+        critical: "Критическая",
+        high: "Высокая",
+        medium: "Средняя",
+        low: "Низкая",
+        info: "Инфо",
+        unknown: "Неизвестная"
+      };
+      const scanStatusLabels = { complete: "Полный", partial: "Частичный", failed: "Ошибка" };
+      const verificationLabels = { corroborated: "Corroborated", disputed: "Disputed", unverified: "Unverified" };
+      const categoryLabels = {
+        code_safety: "Безопасность кода",
+        cve: "CVE",
+        guardrails: "Ограничения",
+        permissions: "Права доступа",
+        supply_chain: "Цепочка поставок",
+        mcp_security: "MCP безопасность",
+        config_injection: "Инъекции конфигурации",
+        obfuscation: "Обфускация",
+        exfiltration: "Эксфильтрация"
+      };
+
+      const refs = Object.fromEntries([
+        "fileInput", "printButton", "emptyState", "dashboard", "emptyError",
+        "reportFileName", "sourceTitle", "sourceMeta", "scanStatus", "metrics",
+        "severityBar", "severityLegend", "severityDonut", "donutValue",
+        "searchInput", "severityFilter", "analyzerFilter", "verificationFilter",
+        "findingCount", "findingList", "runSummary", "runList", "scopePanel", "categoryList",
+        "diagnosticCount", "diagnosticList", "toast"
+      ].map(id => [id, document.getElementById(id)]));
+
+      let report = null;
+      let reportFileName = "";
+      let toastTimer = null;
+      let dragDepth = 0;
+
+      function make(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        if (text !== undefined && text !== null) element.textContent = String(text);
+        return element;
+      }
+
+      function append(parent, ...children) {
+        parent.append(...children.filter(Boolean));
+        return parent;
+      }
+
+      function normalizedSeverity(value) {
+        return severityOrder.includes(value) ? value : "unknown";
+      }
+
+      function finiteNumber(value, fallback = 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      }
+
+      function formatNumber(value) {
+        return new Intl.NumberFormat("ru-RU").format(Math.max(0, finiteNumber(value)));
+      }
+
+      function formatDuration(milliseconds) {
+        const ms = Math.max(0, finiteNumber(milliseconds));
+        if (ms < 1000) return `${Math.round(ms)} мс`;
+        const seconds = ms / 1000;
+        if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} с`;
+        const minutes = Math.floor(seconds / 60);
+        const remainder = Math.round(seconds % 60);
+        return `${minutes} мин ${remainder} с`;
+      }
+
+      function formatBytes(bytes) {
+        const value = Math.max(0, finiteNumber(bytes));
+        if (value < 1024) return `${formatNumber(value)} Б`;
+        const units = ["КБ", "МБ", "ГБ"];
+        let scaled = value / 1024;
+        let unit = units[0];
+        for (let index = 1; scaled >= 1024 && index < units.length; index += 1) {
+          scaled /= 1024;
+          unit = units[index];
+        }
+        return `${scaled.toFixed(scaled >= 10 ? 1 : 2)} ${unit}`;
+      }
+
+      function formatDate(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value || "—";
+        return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
+      }
+
+      function percent(value) {
+        return `${Math.round(Math.min(1, Math.max(0, finiteNumber(value))) * 100)}%`;
+      }
+
+      function locationLabel(location) {
+        if (!location || !location.path) return "Без location";
+        if (!location.start_line) return location.path;
+        const suffix = location.end_line && location.end_line !== location.start_line
+          ? `${location.start_line}–${location.end_line}`
+          : String(location.start_line);
+        return `${location.path}:${suffix}`;
+      }
+
+      function shortHash(value) {
+        if (!value) return "—";
+        const text = String(value);
+        return text.length > 20 ? `${text.slice(0, 12)}…${text.slice(-7)}` : text;
+      }
+
+      function validateReport(value) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new Error("Корень JSON должен быть объектом отчёта.");
+        }
+        const requiredObjects = ["scan", "source", "scope", "summary"];
+        const requiredArrays = ["platforms", "analyzer_runs", "findings", "diagnostics"];
+        for (const key of requiredObjects) {
+          if (!value[key] || typeof value[key] !== "object" || Array.isArray(value[key])) {
+            throw new Error(`В отчёте отсутствует объект «${key}».`);
+          }
+        }
+        for (const key of requiredArrays) {
+          if (!Array.isArray(value[key])) throw new Error(`В отчёте отсутствует массив «${key}».`);
+        }
+        if (!value.schema_version) throw new Error("В отчёте отсутствует schema_version.");
+        return value;
+      }
+
+      function showError(message) {
+        refs.emptyError.textContent = message;
+        refs.emptyError.hidden = false;
+        refs.toast.textContent = message;
+        refs.toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { refs.toast.hidden = true; }, 6000);
+      }
+
+      async function loadFile(file) {
+        if (!file) return;
+        if (file.size > MAX_FILE_BYTES) {
+          showError(`Файл больше ${formatBytes(MAX_FILE_BYTES)} и не будет открыт в браузере.`);
+          return;
+        }
+        try {
+          const parsed = validateReport(JSON.parse(await file.text()));
+          report = parsed;
+          reportFileName = file.name;
+          refs.emptyError.hidden = true;
+          refs.toast.hidden = true;
+          resetFilters();
+          renderReport();
+          refs.emptyState.hidden = true;
+          refs.dashboard.hidden = false;
+          refs.printButton.hidden = false;
+          document.title = `${file.name} — Skills Verified`;
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (error) {
+          showError(error instanceof SyntaxError ? "Файл не является валидным JSON." : error.message);
+        } finally {
+          refs.fileInput.value = "";
+        }
+      }
+
+      function resetFilters() {
+        refs.searchInput.value = "";
+        refs.verificationFilter.value = "";
+        fillSelect(refs.severityFilter, severityOrder.filter(value => report.findings.some(item => normalizedSeverity(item.severity) === value)), "Любая severity", severityLabels);
+        const analyzers = [...new Set(report.findings.map(item => item.analyzer).filter(Boolean))].sort();
+        fillSelect(refs.analyzerFilter, analyzers, "Любой анализатор");
+      }
+
+      function fillSelect(select, values, emptyLabel, labels = {}) {
+        select.replaceChildren();
+        const empty = make("option", "", emptyLabel);
+        empty.value = "";
+        select.append(empty);
+        for (const value of values) {
+          const option = make("option", "", labels[value] || value);
+          option.value = value;
+          select.append(option);
+        }
+      }
+
+      function renderReport() {
+        renderHeader();
+        renderMetrics();
+        renderSeverity();
+        renderCategories();
+        renderFindings();
+        renderRuns();
+        renderScope();
+        renderDiagnostics();
+      }
+
+      function renderHeader() {
+        const { scan, source } = report;
+        refs.reportFileName.textContent = reportFileName;
+        refs.sourceTitle.textContent = source.input || "Неизвестный источник";
+        refs.scanStatus.className = `status-chip status-${scan.status || "failed"}`;
+        refs.scanStatus.textContent = scanStatusLabels[scan.status] || scan.status || "Неизвестно";
+        refs.sourceMeta.replaceChildren();
+        const scanner = scan.scanner || {};
+        const metadata = [
+          `Запуск: ${formatDate(scan.started_at)}`,
+          `Длительность: ${formatDuration(scan.duration_ms)}`,
+          `${scanner.name || "scanner"} ${scanner.version || ""}`.trim(),
+          `Schema ${report.schema_version}`
+        ];
+        for (const value of metadata) refs.sourceMeta.append(make("span", "", value));
+      }
+
+      function metric(label, value, caption, modifier = "") {
+        const card = make("article", `metric-card ${modifier}`.trim());
+        append(card, make("div", "metric-label", label), make("div", "metric-value", value), make("div", "metric-caption", caption));
+        return card;
+      }
+
+      function renderMetrics() {
+        const counts = severityCounts();
+        const runs = report.analyzer_runs;
+        const completed = runs.filter(run => run.status === "completed").length;
+        refs.metrics.replaceChildren(
+          metric("Всего findings", formatNumber(report.findings.length), `${formatNumber(report.diagnostics.length)} diagnostics`),
+          metric("Critical + high", formatNumber(counts.critical + counts.high), `${formatNumber(counts.critical)} critical`, (counts.critical + counts.high) ? "is-danger" : ""),
+          metric("Проверено файлов", formatNumber(report.scope.files_scanned), `${formatBytes(report.scope.bytes_scanned)} · пропущено ${formatNumber(report.scope.files_skipped)}`),
+          metric("Analyzer runs", `${completed}/${runs.length}`, `${runs.length - completed} не завершены полностью`)
+        );
+      }
+
+      function severityCounts() {
+        const counts = Object.fromEntries(severityOrder.map(value => [value, 0]));
+        for (const finding of report.findings) counts[normalizedSeverity(finding.severity)] += 1;
+        return counts;
+      }
+
+      function renderSeverity() {
+        const counts = severityCounts();
+        const total = Math.max(1, report.findings.length);
+        refs.severityBar.replaceChildren();
+        refs.severityLegend.replaceChildren();
+        const gradient = [];
+        let offset = 0;
+        const colorVariables = { critical: "#ff6480", high: "#ff9c66", medium: "#f4ca64", low: "#70b9ff", info: "#8c9caf", unknown: "#75837d" };
+
+        for (const severity of severityOrder) {
+          const count = counts[severity];
+          if (count > 0) {
+            const segment = make("div", `severity-segment severity-${severity}`);
+            segment.style.flexGrow = String(count);
+            segment.title = `${severityLabels[severity]}: ${count}`;
+            refs.severityBar.append(segment);
+            const start = offset;
+            offset += count / total * 100;
+            gradient.push(`${colorVariables[severity]} ${start}% ${offset}%`);
+          }
+          const legend = make("span", "legend-item");
+          const dot = make("span", `legend-dot severity-${severity}`);
+          append(legend, dot, make("span", "", severityLabels[severity]), make("strong", "", formatNumber(count)));
+          refs.severityLegend.append(legend);
+        }
+
+        refs.severityDonut.style.background = gradient.length ? `conic-gradient(${gradient.join(",")})` : "var(--surface-raised)";
+        refs.donutValue.textContent = formatNumber(report.findings.length);
+      }
+
+      function renderCategories() {
+        const groups = new Map();
+        for (const finding of report.findings) {
+          const category = finding.category || "unknown";
+          const group = groups.get(category) || { count: 0, severity: "unknown", analyzers: new Set() };
+          group.count += 1;
+          if (severityWeight[normalizedSeverity(finding.severity)] > severityWeight[group.severity]) {
+            group.severity = normalizedSeverity(finding.severity);
+          }
+          if (finding.analyzer) group.analyzers.add(finding.analyzer);
+          groups.set(category, group);
+        }
+
+        refs.categoryList.replaceChildren();
+        if (!groups.size) {
+          refs.categoryList.append(make("div", "list-empty", "Категории отсутствуют."));
+          return;
+        }
+        for (const [category, group] of [...groups].sort((left, right) => right[1].count - left[1].count)) {
+          const item = make("article", "category-item");
+          item.dataset.severity = group.severity;
+          const copy = make("div");
+          append(
+            copy,
+            make("div", "category-name", categoryLabels[category] || category),
+            make("div", "category-caption", `${formatNumber(group.count)} находок`)
+          );
+          append(
+            item,
+            make("div", "category-count", formatNumber(group.count)),
+            copy,
+            make("div", "category-analyzers", [...group.analyzers].join(", "))
+          );
+          refs.categoryList.append(item);
+        }
+      }
+
+      function searchableText(finding) {
+        return [finding.title, finding.description, finding.rule_id, finding.analyzer, finding.category, finding.cve_id, finding.location?.path]
+          .filter(Boolean).join(" ").toLocaleLowerCase("ru");
+      }
+
+      function renderFindings() {
+        const query = refs.searchInput.value.trim().toLocaleLowerCase("ru");
+        const severity = refs.severityFilter.value;
+        const analyzer = refs.analyzerFilter.value;
+        const verification = refs.verificationFilter.value;
+
+        const filtered = report.findings
+          .filter(item => !query || searchableText(item).includes(query))
+          .filter(item => !severity || normalizedSeverity(item.severity) === severity)
+          .filter(item => !analyzer || item.analyzer === analyzer)
+          .filter(item => {
+            if (!verification) return true;
+            if (verification === "deterministic") return !item.verification;
+            return item.verification?.status === verification;
+          })
+          .sort((left, right) => {
+            const severityDifference = severityWeight[normalizedSeverity(right.severity)] - severityWeight[normalizedSeverity(left.severity)];
+            if (severityDifference) return severityDifference;
+            return locationLabel(left.location).localeCompare(locationLabel(right.location));
+          });
+
+        refs.findingCount.textContent = `${formatNumber(filtered.length)} из ${formatNumber(report.findings.length)}`;
+        refs.findingList.replaceChildren();
+        if (!filtered.length) {
+          refs.findingList.append(make("div", "list-empty", "По выбранным фильтрам findings не найдено."));
+          return;
+        }
+
+        // ponytail: cap DOM nodes at 500; add virtualization if real reports exceed this.
+        const visible = filtered.slice(0, MAX_RENDERED_FINDINGS);
+        const fragment = document.createDocumentFragment();
+        for (const finding of visible) fragment.append(buildFinding(finding));
+        refs.findingList.append(fragment);
+        if (filtered.length > visible.length) {
+          refs.findingList.append(make("div", "render-note", `Показаны первые ${formatNumber(visible.length)} findings из ${formatNumber(filtered.length)}. Уточните фильтры для остальных.`));
+        }
+      }
+
+      function buildFinding(finding) {
+        const severity = normalizedSeverity(finding.severity);
+        const article = make("article", "finding-card");
+        article.dataset.severity = severity;
+        const details = make("details");
+        details.open = true;
+        const summary = make("summary");
+        const heading = make("div", "finding-heading");
+        const titleRow = make("div", "finding-title-row");
+        const severityChip = make("span", "severity-chip", severityLabels[severity]);
+        severityChip.dataset.severity = severity;
+        append(titleRow, make("span", "finding-title", finding.title || "Без названия"));
+        const meta = make("div", "finding-meta");
+        append(meta, make("span", "", categoryLabels[finding.category] || finding.category || "Без категории"), make("span", "", locationLabel(finding.location)), make("span", "", `Анализатор: ${finding.analyzer || "unknown"}`));
+        append(heading, titleRow, meta);
+
+        const side = make("div", "finding-side");
+        const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        chevron.setAttribute("viewBox", "0 0 24 24");
+        chevron.setAttribute("fill", "none");
+        chevron.setAttribute("stroke", "currentColor");
+        chevron.setAttribute("stroke-width", "2");
+        chevron.classList.add("chevron");
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", "m6 9 6 6 6-6");
+        chevron.append(path);
+        append(side, severityChip, chevron);
+        append(summary, heading, side);
+        append(details, summary, buildFindingBody(finding));
+        article.append(details);
+        return article;
+      }
+
+      function buildFindingBody(finding) {
+        const body = make("div", "finding-body");
+        body.append(make("p", "finding-description", finding.description || "Описание отсутствует."));
+
+        const detailGrid = make("div", "detail-grid");
+        const detailValues = [
+          ["Категория", finding.category || "—"],
+          ["Confidence", percent(finding.confidence)],
+          ["CVE", finding.cve_id || "—"],
+          ["Fingerprint", shortHash(finding.fingerprint)]
+        ];
+        for (const [label, value] of detailValues) {
+          const cell = make("div", "detail-cell");
+          const detailValue = make("div", "detail-value", value);
+          if (label === "Fingerprint") detailValue.title = finding.fingerprint || "";
+          append(cell, make("div", "detail-label", label), detailValue);
+          detailGrid.append(cell);
+        }
+        body.append(detailGrid);
+
+        if (finding.evidence?.snippet) {
+          const section = make("section", "subsection");
+          const title = make("div", "subsection-title", `Evidence · ${finding.evidence.kind || "source"}`);
+          const pre = make("pre");
+          pre.append(make("code", "", finding.evidence.snippet));
+          append(section, title, pre);
+          body.append(section);
+        }
+
+        if (finding.remediation) {
+          const section = make("section", "subsection");
+          append(section, make("div", "subsection-title", "Remediation"), make("div", "finding-description", finding.remediation));
+          body.append(section);
+        }
+
+        if (finding.verification) body.append(buildVerification(finding.verification));
+        if (Array.isArray(finding.references) && finding.references.length) body.append(buildReferences(finding.references));
+        return body;
+      }
+
+      function buildVerification(verification) {
+        const section = make("section", "subsection");
+        section.append(make("div", "subsection-title", "LLM verification"));
+        const box = make("div", "verification-box");
+        const head = make("div", "verification-head");
+        append(head, make("strong", `verification-${verification.status}`, verificationLabels[verification.status] || verification.status), make("span", "mini-chip", verification.requested_model || "model"));
+        box.append(head);
+
+        const metrics = make("div", "verification-metrics");
+        for (const [label, value] of [["Попытки", verification.attempts], ["За", verification.agreements], ["Против", verification.disagreements], ["Неясно", verification.inconclusive]]) {
+          const item = make("span", "", label);
+          item.prepend(make("strong", "", formatNumber(value)));
+          metrics.append(item);
+        }
+        box.append(metrics);
+
+        const hashDetails = make("details", "hash-details");
+        hashDetails.append(make("summary", "", "Provenance hashes и совпадения"));
+        const hashList = make("div", "hash-list");
+        const hashes = [
+          ["candidate", verification.candidate_id],
+          ["candidate prompt", verification.candidate_prompt_sha256],
+          ["verification prompt", verification.verification_prompt_sha256],
+          ["generation response", verification.generation_response_sha256]
+        ];
+        for (const [label, value] of hashes) hashList.append(make("div", "", `${label}: ${value || "—"}`));
+        for (const [index, value] of (verification.verification_response_sha256 || []).entries()) hashList.append(make("div", "", `verification response ${index + 1}: ${value}`));
+        if (verification.co_located_deterministic_rule_ids?.length) hashList.append(make("div", "", `co-located rules: ${verification.co_located_deterministic_rule_ids.join(", ")}`));
+        hashDetails.append(hashList);
+        box.append(hashDetails);
+        section.append(box);
+        return section;
+      }
+
+      function buildReferences(references) {
+        const section = make("section", "subsection");
+        section.append(make("div", "subsection-title", "References"));
+        const list = make("ul", "reference-list");
+        for (const reference of references) {
+          const item = make("li");
+          let element;
+          try {
+            const url = new URL(reference);
+            if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsupported protocol");
+            element = make("a", "", reference);
+            element.href = url.href;
+            element.target = "_blank";
+            element.rel = "noopener noreferrer";
+          } catch {
+            element = make("span", "", reference);
+          }
+          item.append(element);
+          list.append(item);
+        }
+        section.append(list);
+        return section;
+      }
+
+      function renderRuns() {
+        const runs = report.analyzer_runs;
+        const completed = runs.filter(run => run.status === "completed").length;
+        refs.runSummary.textContent = `${completed} из ${runs.length} завершены полностью`;
+        refs.runList.replaceChildren();
+        if (!runs.length) {
+          refs.runList.append(make("div", "list-empty", "Analyzer runs отсутствуют."));
+          return;
+        }
+        for (const run of runs) {
+          const item = make("article", "run-item");
+          const head = make("div", "run-head");
+          const name = make("span", "run-name", run.name || "unknown");
+          const status = make("span", `run-status status-${run.status || "skipped"}`);
+          status.title = run.status || "unknown";
+          append(head, name, status);
+          const meta = make("div", "run-meta");
+          append(meta, make("span", "", `${formatNumber(run.findings_count)} findings`), make("span", "", formatDuration(run.duration_ms)));
+          append(item, head, meta);
+          if (run.reason) item.append(make("div", "run-reason", run.reason));
+          refs.runList.append(item);
+        }
+      }
+
+      function renderScope() {
+        const { scope, source, platforms } = report;
+        refs.scopePanel.replaceChildren();
+
+        const roots = make("div", "scope-group");
+        roots.append(make("div", "scope-label", "Skill roots"));
+        const rootTags = make("div", "tag-list");
+        for (const value of scope.skill_roots || []) rootTags.append(make("span", "mini-chip", value));
+        if (!rootTags.children.length) rootTags.append(make("span", "mini-chip", "Не обнаружены"));
+        roots.append(rootTags);
+        refs.scopePanel.append(roots);
+
+        const platformGroup = make("div", "scope-group");
+        platformGroup.append(make("div", "scope-label", "Platforms"));
+        const platformTags = make("div", "tag-list");
+        for (const platform of platforms || []) {
+          const chip = make("span", "mini-chip", `${platform.name} · ${percent(platform.confidence)}`);
+          chip.title = (platform.evidence || []).join(", ");
+          platformTags.append(chip);
+        }
+        if (!platformTags.children.length) platformTags.append(make("span", "mini-chip", "Не обнаружены"));
+        platformGroup.append(platformTags);
+        refs.scopePanel.append(platformGroup);
+
+        const provenance = make("div", "scope-group");
+        provenance.append(make("div", "scope-label", "Provenance"));
+        const rows = make("div", "scope-kv");
+        for (const [label, value] of [["Commit", source.commit_sha || "—"], ["Artifact", source.artifact_sha256 || "—"], ["Ruleset", report.scan.scanner?.ruleset_version || "—"]]) {
+          const row = make("div", "scope-row");
+          const strong = make("strong", "", value);
+          strong.title = value;
+          append(row, make("span", "", label), strong);
+          rows.append(row);
+        }
+        provenance.append(rows);
+        refs.scopePanel.append(provenance);
+      }
+
+      function renderDiagnostics() {
+        const diagnostics = report.diagnostics;
+        refs.diagnosticCount.textContent = formatNumber(diagnostics.length);
+        refs.diagnosticList.replaceChildren();
+        if (!diagnostics.length) {
+          refs.diagnosticList.append(make("div", "list-empty", "Diagnostics отсутствуют."));
+          return;
+        }
+        const levelWeight = { error: 3, warning: 2, info: 1 };
+        const sorted = [...diagnostics].sort((left, right) => (levelWeight[right.level] || 0) - (levelWeight[left.level] || 0));
+        for (const diagnostic of sorted) {
+          const item = make("article", "diagnostic-item");
+          item.dataset.level = diagnostic.level || "info";
+          const icon = make("div", "diagnostic-icon", diagnostic.level === "error" ? "×" : diagnostic.level === "warning" ? "!" : "i");
+          const content = make("div");
+          const title = make("div", "diagnostic-title");
+          append(title, make("span", "diagnostic-code", diagnostic.code || "diagnostic"), make("span", "diagnostic-context", [diagnostic.analyzer, diagnostic.path].filter(Boolean).join(" · ")));
+          append(content, title, make("div", "diagnostic-message", diagnostic.message || ""));
+          if (diagnostic.details && Object.keys(diagnostic.details).length) {
+            const details = make("details", "diagnostic-details");
+            details.append(make("summary", "", "Технические детали"));
+            const pre = make("pre");
+            pre.append(make("code", "", JSON.stringify(diagnostic.details, null, 2)));
+            details.append(pre);
+            content.append(details);
+          }
+          append(item, icon, content);
+          refs.diagnosticList.append(item);
+        }
+      }
+
+      refs.fileInput.addEventListener("change", event => loadFile(event.target.files?.[0]));
+      refs.printButton.addEventListener("click", () => window.print());
+      for (const control of [refs.searchInput, refs.severityFilter, refs.analyzerFilter, refs.verificationFilter]) {
+        control.addEventListener(control.tagName === "INPUT" ? "input" : "change", renderFindings);
+      }
+
+      document.addEventListener("dragenter", event => {
+        event.preventDefault();
+        dragDepth += 1;
+        document.body.classList.add("is-dragging");
+      });
+      document.addEventListener("dragover", event => event.preventDefault());
+      document.addEventListener("dragleave", event => {
+        event.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (!dragDepth) document.body.classList.remove("is-dragging");
+      });
+      document.addEventListener("drop", event => {
+        event.preventDefault();
+        dragDepth = 0;
+        document.body.classList.remove("is-dragging");
+        loadFile(event.dataTransfer?.files?.[0]);
+      });
+
+      for (const label of document.querySelectorAll('label[for="fileInput"]')) {
+        label.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            refs.fileInput.click();
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
