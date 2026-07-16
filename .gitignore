@@ -20,3 +20,6 @@ workspace/*
 !workspace/.gitkeep
 reports/*
 !reports/.gitkeep
+
+# Blind corpus fixtures are intentionally not distributed; rebuilt locally only.
+tests/corpora/blind-60/repo/

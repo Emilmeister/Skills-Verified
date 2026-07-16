@@ -1,5 +1,0 @@
-{
-  "image": "registry.example.invalid/skill-builder@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "privileged": true,
-  "network": "none"
-}

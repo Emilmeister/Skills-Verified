@@ -200,7 +200,7 @@ Ground truth и фрагменты кода приведены в таблице
 
 ## Артефакты
 
-- Корпус: `tests/corpora/blind-60/repo/`.
+- Корпус: `repo/` на момент прогона; fixtures в репозитории не хранятся, состав описан в `README.md`.
 - Ground truth: `tests/corpora/blind-60/ground_truth.json`.
 - GPT-OSS JSON: `reports/blind-60-20260716/cloudru-gpt-oss-120b/`.
 - Qwen JSON: `reports/blind-60-20260716/cloudru-qwen3.6-35b-a3b/`.

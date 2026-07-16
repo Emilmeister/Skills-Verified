@@ -1,24 +1,29 @@
 # Blind vulnerable skill corpus
 
-**Warning:** these are intentionally unsafe fixtures for security-scanner evaluation. Do not execute any included script, install its dependencies, start its servers, or use its credentials.
+The fixtures themselves are **not distributed in this repository**. They were 50
+intentionally unsafe and 10 safe skills built solely to evaluate this scanner,
+and shipping runnable attack samples in a public repository is not worth the
+benchmark convenience. What remains here is the corpus definition: the skill
+inventory and vulnerability classes below, plus `ground_truth.json` with the
+per-skill labels. `REPORT.md` preserves the measured results.
 
-The scannable repository is `repo/`; `ground_truth.json` stays outside it. Scan
-individual directories under `repo/skills/`, never this corpus root, so the
-ground truth cannot enter analyzer or LLM context. `REPORT.md` compares all
-non-LLM analyzers with full Cloud.ru runs using GPT-OSS, three Qwen variants,
-GLM-4.7, and MiniMax M2.5.
-
-Example deterministic run (all registered analyzers except `llm`):
+To reproduce the benchmark, rebuild the corpus locally as `repo/skills/<skill>`,
+one directory per entry below, keeping `ground_truth.json` outside the scanned
+path so labels cannot enter analyzer or LLM context. Scan individual skill
+directories, never the corpus root:
 
 ```bash
-skills-verified tests/corpora/blind-60/repo/skills/shell-backup \
+skills-verified repo/skills/shell-backup \
   --skip llm --compact --output reports/shell-backup.no-llm.json
 ```
 
 For the full run, omit `--skip llm` and provide the LLM configuration through
-environment variables. Raw reports are intentionally kept under the ignored
-`reports/` directory; the reviewed experiment result is preserved in
-`REPORT.md`.
+environment variables. `REPORT.md` compares all non-LLM analyzers with full
+Cloud.ru runs using GPT-OSS, three Qwen variants, GLM-4.7, and MiniMax M2.5.
+
+**Warning:** any locally rebuilt fixture is intentionally unsafe. Do not execute
+its scripts, install its dependencies, start its servers, or use its
+credentials.
 
 ## Vulnerable skills (50)
 

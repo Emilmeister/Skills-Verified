@@ -449,15 +449,11 @@ diagnostics и analyzer run status. Правила разработки опис
 
 ## Проверочный corpus
 
-[`tests/corpora/blind-60/`](tests/corpora/blind-60/) содержит 50 намеренно
-уязвимых и 10 безопасных скиллов. Не запускайте их scripts и не устанавливайте
-dependencies. `ground_truth.json` расположен вне сканируемого `repo/`: передавайте
-CLI только отдельный каталог `repo/skills/<skill>`, например:
-
-```bash
-skills-verified tests/corpora/blind-60/repo/skills/shell-backup \
-  --skip llm --compact > report.json
-```
+[`tests/corpora/blind-60/`](tests/corpora/blind-60/) описывает blind corpus из 50
+намеренно уязвимых и 10 безопасных скиллов. Сами fixtures в репозитории не
+распространяются: остаются только `ground_truth.json` с labels и
+[README корпуса](tests/corpora/blind-60/README.md) с перечнем скиллов и их
+классов уязвимостей, достаточным для воспроизведения корпуса локально.
 
 [Сравнительный отчёт](tests/corpora/blind-60/REPORT.md) фиксирует семь режимов:
 обычные анализаторы и шесть Cloud.ru LLM. Он отдельно показывает raw detection,

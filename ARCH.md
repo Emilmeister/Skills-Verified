@@ -453,10 +453,12 @@ scan; `--output` сохраняет дополнительную копию.
 
 ## Verification corpus
 
-Blind corpus хранится в `tests/corpora/blind-60/`: сканируемые fixtures находятся
-под `repo/skills/`, а `ground_truth.json` — за пределами передаваемого analyzer
-пути. Поэтому ожидаемые уязвимости и labels не попадают ни в inventory, ни в LLM
-prompt. Fixtures намеренно не форматируются и никогда не исполняются.
+Blind corpus описан в `tests/corpora/blind-60/`. При прогоне сканируемые fixtures
+располагаются под `repo/skills/`, а `ground_truth.json` — за пределами
+передаваемого analyzer пути, поэтому ожидаемые уязвимости и labels не попадают ни
+в inventory, ни в LLM prompt. Fixtures намеренно не форматируются и никогда не
+исполняются; в репозитории они не хранятся — распространяются только labels и
+описание корпуса.
 
 ```mermaid
 flowchart LR

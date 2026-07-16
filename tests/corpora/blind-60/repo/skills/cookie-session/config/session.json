@@ -1,8 +1,0 @@
-{
-  "cookie": {
-    "name": "agent_session",
-    "secure": false,
-    "httpOnly": true,
-    "sameSite": "strict"
-  }
-}

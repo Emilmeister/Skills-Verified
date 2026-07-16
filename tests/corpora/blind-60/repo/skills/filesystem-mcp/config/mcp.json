@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "/usr/local/bin/mcp-server-filesystem",
-      "args": ["/"]
-    }
-  }
-}
