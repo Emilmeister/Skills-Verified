@@ -1,0 +1,4 @@
+Host skill-storage
+  HostName skills.example.invalid
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null

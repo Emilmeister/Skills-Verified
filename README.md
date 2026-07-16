@@ -206,6 +206,12 @@ export SV_LLM_CONCURRENCY=3
 skills-verified ./skill --only llm --progress > llm-report.json
 ```
 
+LLM получает явное требование писать человекочитаемые `title` и `description`
+на русском; общая `remediation` для LLM findings также русская. Стабильные
+машинные ключи и enum (`severity`, `verification.status`, `rule_id`), пути и
+точная evidence-цитата не переводятся, чтобы JSON оставался совместимым со
+схемой и внешними сервисами.
+
 Те же значения принимаются через `--llm-url`, `--llm-model` и `--llm-key`, но
 секрет рекомендуется задавать только через `SV_LLM_KEY`: CLI-аргументы могут
 быть видны другим локальным процессам.
@@ -440,6 +446,24 @@ ruff format --check src/ tests/
 `Finding` и регистрируется в `cli.py`. Тесты должны проверять location, evidence,
 diagnostics и analyzer run status. Правила разработки описаны в
 [AGENTS.md](AGENTS.md).
+
+## Проверочный corpus
+
+[`tests/corpora/blind-60/`](tests/corpora/blind-60/) содержит 50 намеренно
+уязвимых и 10 безопасных скиллов. Не запускайте их scripts и не устанавливайте
+dependencies. `ground_truth.json` расположен вне сканируемого `repo/`: передавайте
+CLI только отдельный каталог `repo/skills/<skill>`, например:
+
+```bash
+skills-verified tests/corpora/blind-60/repo/skills/shell-backup \
+  --skip llm --compact > report.json
+```
+
+[Сравнительный отчёт](tests/corpora/blind-60/REPORT.md) фиксирует семь режимов:
+обычные анализаторы и шесть Cloud.ru LLM. Он отдельно показывает raw detection,
+результат при допуске только deterministic/`corroborated`, ложные claims,
+полноту runs и время. Это benchmark snapshot, а не score или публикационная
+политика. Raw JSON остаётся в игнорируемом каталоге `reports/`.
 
 ## Безопасность и ограничения
 

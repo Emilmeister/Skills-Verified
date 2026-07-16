@@ -1,0 +1,1 @@
+agent-helper @ git+https://github.com/example/agent-helper.git

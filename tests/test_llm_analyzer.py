@@ -105,6 +105,19 @@ def test_parse_and_validate_llm_response():
     assert findings[0].verification is not None
     assert findings[0].verification.status == VerificationStatus.UNVERIFIED
     assert findings[0].verification.evidence_matched is True
+    assert findings[0].remediation == (
+        "Проверьте указанный код и устраните или ограничьте описанную уязвимость."
+    )
+
+
+def test_candidate_prompt_requires_russian_human_readable_fields():
+    request = LlmAnalyzer(_config())._build_request({"code.py": "print('safe')\n"})
+
+    system_prompt = request["messages"][0]["content"]
+    analysis_prompt = request["messages"][1]["content"]
+    assert "in Russian" in system_prompt
+    assert "`title` and `description` fields in Russian" in analysis_prompt
+    assert '"title": "Краткое описание"' in analysis_prompt
 
 
 def test_evidence_binding_normalizes_layout_and_uses_canonical_source():
