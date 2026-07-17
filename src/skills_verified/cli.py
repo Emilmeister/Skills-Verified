@@ -262,18 +262,11 @@ def _select_analyzers(
     help="Adversarial verification attempts for each candidate batch; 0 disables.",
 )
 @click.option(
-    "--llm-json-schema/--no-llm-json-schema",
-    default=False,
-    envvar="SV_LLM_JSON_SCHEMA",
-    show_default=True,
-    help="Use provider-side JSON Schema instead of JSON object mode.",
-)
-@click.option(
     "--llm-structured-output/--no-llm-structured-output",
     default=True,
     envvar="SV_LLM_STRUCTURED_OUTPUT",
     show_default=True,
-    help="Request OpenAI JSON response mode from the configured LLM endpoint.",
+    help="Request strict OpenAI-compatible JSON Schema output from the LLM endpoint.",
 )
 @click.option(
     "--compact", is_flag=True, help="Emit compact JSON instead of indented JSON."
@@ -299,7 +292,6 @@ def main(
     llm_concurrency: int,
     llm_max_batches: int | None,
     llm_verification_runs: int,
-    llm_json_schema: bool,
     llm_structured_output: bool,
     compact: bool,
 ) -> None:
@@ -324,7 +316,6 @@ def main(
                 concurrency=llm_concurrency,
                 max_batches=llm_max_batches,
                 verification_runs=llm_verification_runs,
-                json_schema=llm_json_schema,
             )
             if llm_url and llm_model and llm_key
             else None
