@@ -277,6 +277,11 @@ Candidate prompt требует русские человекочитаемые 
 идентификаторы и exact evidence остаются без перевода; verification работает с
 ними независимо от языка текста claim.
 
+Candidate и каждый verification request по умолчанию передают собственную JSON
+Schema через OpenAI-compatible `response_format` с `strict: true`. Отдельного
+режима `json_object` и CLI-флага выбора schema нет; локальная валидация ответа
+остаётся обязательной второй границей.
+
 ```mermaid
 flowchart LR
     Files["sanitized files<br/>detected skill roots first"] --> Redact["redact literal secrets<br/>preserve source expressions"]
@@ -342,6 +347,11 @@ redaction evidence получает kind
 `redacted_source`, потому что такая цитата относится к LLM input, а не напрямую к
 artifact.
 
+Отклонённый individual claim остаётся audit diagnostic уровня `info` и не
+деградирует run: это успешная работа trust boundary, а не потеря scan coverage.
+Timeout, API/response failure и незавершённая verification по-прежнему дают
+warning/error и статус `partial`.
+
 `candidate_id` хеширует нормализованные title, description, severity, path,
 канонические start/end lines и evidence. Поэтому разные claims или severity на одной строке не
 делят verifier decisions и не схлопываются последующим deduplication.
@@ -354,7 +364,7 @@ deterministic rules той же категории, если путь совпа
 publication verdict.
 
 Для воспроизводимости сохраняются requested model, host endpoint,
-`temperature=0`, лимиты, режим structured output, SHA-256 фактических
+`temperature=0`, лимиты, режим strict provider-side JSON Schema, SHA-256 фактических
 candidate/verification prompts и полных response envelopes. Выбранное имя
 token-limit параметра (`max_tokens` или `max_completion_tokens`) также входит в
 provenance; там же фиксируются опциональный `reasoning_effort` и лимит

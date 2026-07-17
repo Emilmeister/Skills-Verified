@@ -386,7 +386,6 @@ class LlmConfig:
     max_completion_tokens: int = MAX_COMPLETION_TOKENS
     token_parameter: str = "max_tokens"
     reasoning_effort: str | None = None
-    json_schema: bool = False
     verification_runs: int = 3
     concurrency: int = DEFAULT_LLM_CONCURRENCY
     max_batches: int | None = None
@@ -430,8 +429,6 @@ class LlmConfig:
             type(self.max_batches) is not int or self.max_batches < 1
         ):
             raise ValueError("LLM max batches must be a positive integer")
-        if self.json_schema and not self.structured_output:
-            raise ValueError("LLM JSON Schema requires structured output")
         if not self.model or not self.key:
             raise ValueError("LLM model and key must be non-empty")
         parsed = urlsplit(self.url)
@@ -512,7 +509,8 @@ class LlmAnalyzer(Analyzer):
                 "endpoint_host": endpoint.hostname,
                 "temperature": LLM_TEMPERATURE,
                 "structured_output": self.config.structured_output,
-                "json_schema": self.config.json_schema,
+                "json_schema": self.config.structured_output,
+                "json_schema_strict": self.config.structured_output,
                 "verification_runs": self.config.verification_runs,
                 "concurrency": self.config.concurrency,
                 "request_timeout_seconds": self.config.timeout_seconds,
@@ -820,12 +818,10 @@ class LlmAnalyzer(Analyzer):
     def _response_format(self, schema: dict[str, Any], name: str) -> dict | None:
         if not self.config.structured_output:
             return None
-        if self.config.json_schema:
-            return {
-                "type": "json_schema",
-                "json_schema": {"name": name, "schema": schema},
-            }
-        return {"type": "json_object"}
+        return {
+            "type": "json_schema",
+            "json_schema": {"name": name, "strict": True, "schema": schema},
+        }
 
     def _build_verification_request(
         self,
@@ -1668,6 +1664,7 @@ class LlmAnalyzer(Analyzer):
                 self._diagnostic(
                     code,
                     f"LLM finding {index} was rejected: {exc}",
+                    level=DiagnosticLevel.INFO,
                     details=details,
                 )
         unique: dict[str, Finding] = {}

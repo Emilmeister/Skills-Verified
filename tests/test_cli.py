@@ -302,7 +302,6 @@ def test_cli_forwards_llm_runtime_limits(fake_repo_path: Path, monkeypatch):
                 analyzer.config.concurrency,
                 analyzer.config.max_batches,
                 analyzer.config.verification_runs,
-                analyzer.config.json_schema,
                 timeout_seconds,
             )
         )
@@ -337,7 +336,6 @@ def test_cli_forwards_llm_runtime_limits(fake_repo_path: Path, monkeypatch):
             "10",
             "--llm-verification-runs",
             "2",
-            "--llm-json-schema",
             "--compact",
         ],
     )
@@ -353,7 +351,6 @@ def test_cli_forwards_llm_runtime_limits(fake_repo_path: Path, monkeypatch):
         concurrency,
         max_batches,
         verification_runs,
-        json_schema,
         effective_timeout,
     ) = observed[0]
     assert request_timeout == 45
@@ -364,8 +361,14 @@ def test_cli_forwards_llm_runtime_limits(fake_repo_path: Path, monkeypatch):
     assert concurrency == 2
     assert max_batches == 10
     assert verification_runs == 2
-    assert json_schema is True
     assert 0 < effective_timeout <= 45
+
+
+def test_cli_rejects_removed_llm_json_schema_flag(fake_repo_path: Path):
+    result = CliRunner().invoke(main, [str(fake_repo_path), "--llm-json-schema"])
+
+    assert result.exit_code == 2
+    assert "No such option: --llm-json-schema" in result.output
 
 
 def test_cli_leaves_llm_batch_and_total_time_budgets_unlimited_by_default(
