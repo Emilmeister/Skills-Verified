@@ -34,9 +34,6 @@ target-version = "py311"
 src = ["src"]
 extend-exclude = ["tests/corpora/**"]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/fixtures/**" = ["E401", "E402", "F401"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/skills_verified"]
 

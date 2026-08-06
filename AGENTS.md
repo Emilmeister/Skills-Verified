@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a Python 3.11+ security scanner using a `src` layout. Application code lives in `src/skills_verified/`: `cli.py` defines the Click entry point, `core/` contains models and the scan pipeline, `analyzers/` holds one analyzer per module, `platforms/` detects supported agent environments, and `output/` renders reports. Signature databases are YAML files under `data/`. Tests mirror features in `tests/test_*.py`; deliberately unsafe samples live in `tests/fixtures/fake_repo/`. Keep design notes in `docs/superpowers/`, CI examples in `examples/`, and generated scans out of version control (`reports/` and `workspace/` retain only `.gitkeep`).
+This is a Python 3.11+ security scanner using a `src` layout. Application code lives in `src/skills_verified/`: `cli.py` defines the Click entry point, `core/` contains models and the scan pipeline, `analyzers/` holds one analyzer per module, `platforms/` detects supported agent environments, and `output/` renders reports. Signature databases are YAML files under `data/`. Tests mirror features in `tests/test_*.py`. Keep design notes in `docs/superpowers/`, CI examples in `examples/`, and generated scans out of version control (`reports/` and `workspace/` retain only `.gitkeep`).
 
 ## Build, Test, and Development Commands
 
@@ -28,7 +28,7 @@ Use four-space indentation, Python 3.11 syntax, type hints for public interfaces
 
 ## Testing Guidelines
 
-Use pytest and name tests `test_<behavior>`. Add `tests/test_<analyzer>.py` for each analyzer and extend `tests/fixtures/fake_repo/` only when a realistic repository artifact is required. Follow the documented TDD flow: add a failing focused test, implement the change, then run the full suite. No minimum coverage percentage is configured, but new branches and regressions should be exercised.
+Use pytest and name tests `test_<behavior>`. Add `tests/test_<analyzer>.py` for each analyzer and create focused temporary repository inputs with pytest `tmp_path` when realistic artifacts are required. Follow the documented TDD flow: add a failing focused test, implement the change, then run the full suite. No minimum coverage percentage is configured, but new branches and regressions should be exercised.
 
 ## Commit & Pull Request Guidelines
 
