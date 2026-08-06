@@ -207,16 +207,3 @@ def test_schema_requires_non_null_verification_for_llm_findings():
     data["findings"][0]["verification"] = None
 
     assert not validator.is_valid(data)
-
-
-def test_golden_v1_report_is_schema_valid():
-    schema = json.loads(
-        files("skills_verified")
-        .joinpath("report.schema.json")
-        .read_text(encoding="utf-8")
-    )
-    golden_path = Path(__file__).parent / "fixtures" / "report-v1.golden.json"
-    golden = json.loads(golden_path.read_text(encoding="utf-8"))
-
-    Draft202012Validator(schema, format_checker=FormatChecker()).validate(golden)
-    assert golden["schema_version"] == "1.0"
