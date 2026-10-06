@@ -1,9 +1,12 @@
 import json
+import os
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
+import skills_verified.cli as cli_module
 from skills_verified.analyzers.llm_analyzer import LlmAnalyzer
 from skills_verified.cli import _all_analyzers, main
 
@@ -122,3 +125,106 @@ def test_cli_redacts_credentials_from_malformed_source_url(scheme):
     assert report["source"]["input"] == f"{scheme}://[bad/repo"
     assert "secret" not in rendered
     assert "token" not in rendered
+
+
+@pytest.mark.parametrize("missing", ["SV_CLOUDRU_KEY_ID", "SV_CLOUDRU_KEY_SECRET"])
+def test_cli_requires_cloudru_credentials_together(tmp_path, missing):
+    environment = {
+        "SV_CLOUDRU_KEY_ID": "test-id",
+        "SV_CLOUDRU_KEY_SECRET": "test-secret",
+    }
+    environment[missing] = None
+
+    result = CliRunner().invoke(
+        main, [str(tmp_path), "--only", "guardrails"], env=environment
+    )
+
+    assert result.exit_code == 2
+    assert "must be provided together" in result.output
+    assert "test-id" not in result.output
+    assert "test-secret" not in result.output
+
+
+@pytest.mark.parametrize("invalid", ["", "   "])
+def test_cli_rejects_empty_cloudru_key_without_echoing_secret(tmp_path, invalid):
+    result = CliRunner().invoke(
+        main,
+        [str(tmp_path), "--only", "guardrails"],
+        env={"SV_CLOUDRU_KEY_ID": invalid, "SV_CLOUDRU_KEY_SECRET": "test-secret"},
+    )
+
+    assert result.exit_code == 2
+    assert "test-secret" not in result.output
+
+
+def test_cli_cloudru_credentials_preserve_local_scans(tmp_path):
+    result = CliRunner().invoke(
+        main,
+        [str(tmp_path), "--only", "guardrails", "--compact"],
+        env={"SV_CLOUDRU_KEY_ID": "test-id", "SV_CLOUDRU_KEY_SECRET": "test-secret"},
+    )
+
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert report["source"]["input"] == str(tmp_path)
+    assert "test-id" not in result.output
+    assert "test-secret" not in result.output
+
+
+def test_cli_cloudru_credentials_are_consumed_before_scanning(monkeypatch, tmp_path):
+    captured = {}
+
+    @contextmanager
+    def fetch(source, **kwargs):
+        captured.update(kwargs)
+        assert os.getenv("SV_CLOUDRU_KEY_ID") is None
+        assert os.getenv("SV_CLOUDRU_KEY_SECRET") is None
+        yield tmp_path
+
+    monkeypatch.setattr(cli_module, "fetched_repo", fetch)
+    result = CliRunner().invoke(
+        main,
+        [
+            "https://repo.cloud.ru/project/skills.git",
+            "--only",
+            "guardrails",
+            "--compact",
+        ],
+        env={"SV_CLOUDRU_KEY_ID": "test-id", "SV_CLOUDRU_KEY_SECRET": "test-secret"},
+    )
+
+    assert result.exit_code == 0, result.output
+    credentials = captured["cloudru_credentials"]
+    assert credentials.key_id == "test-id"
+    assert credentials.key_secret == "test-secret"
+    assert "test-id" not in repr(credentials)
+    assert "test-secret" not in repr(credentials)
+    assert "test-id" not in result.output
+    assert "test-secret" not in result.output
+
+
+def test_cli_cloudru_auth_error_is_a_secret_free_json_report(monkeypatch):
+    @contextmanager
+    def fetch(source, **kwargs):
+        raise RuntimeError("Cloud.ru IAM authentication failed (HTTP 401)")
+        yield
+
+    monkeypatch.setattr(cli_module, "fetched_repo", fetch)
+    result = CliRunner().invoke(
+        main,
+        [
+            "https://repo.cloud.ru/project/skills.git",
+            "--only",
+            "guardrails",
+            "--compact",
+        ],
+        env={"SV_CLOUDRU_KEY_ID": "test-id", "SV_CLOUDRU_KEY_SECRET": "test-secret"},
+    )
+
+    assert result.exit_code == 2
+    report = json.loads(result.output)
+    assert report["scan"]["status"] == "failed"
+    assert report["diagnostics"][0]["code"] == "source_fetch_failed"
+    assert "HTTP 401" in report["diagnostics"][0]["message"]
+    assert "test-id" not in result.output
+    assert "test-secret" not in result.output

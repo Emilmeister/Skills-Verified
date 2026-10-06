@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import threading
 from collections.abc import Callable
@@ -46,6 +47,7 @@ from skills_verified.core.pipeline import (
     Pipeline,
 )
 from skills_verified.output.json_report import report_to_json, save_json_report
+from skills_verified.repo.cloudru_auth import CloudRuCredentials
 from skills_verified.repo.fetcher import (
     DEFAULT_CLONE_TIMEOUT_SECONDS,
     DEFAULT_MAX_CLONE_BYTES,
@@ -295,7 +297,26 @@ def main(
     llm_structured_output: bool,
     compact: bool,
 ) -> None:
-    """Analyze a local directory or Git repository and emit a policy-free JSON report."""
+    """Analyze a local directory or Git repository and emit a policy-free JSON report.
+
+    For Cloud.ru Repo HTTPS authentication, set SV_CLOUDRU_KEY_ID and
+    SV_CLOUDRU_KEY_SECRET together in the environment.
+    """
+    # Consume credentials before starting scanners that inherit the environment.
+    cloudru_key_id = os.environ.pop("SV_CLOUDRU_KEY_ID", None)
+    cloudru_key_secret = os.environ.pop("SV_CLOUDRU_KEY_SECRET", None)
+    if (cloudru_key_id is None) != (cloudru_key_secret is None):
+        raise click.UsageError(
+            "SV_CLOUDRU_KEY_ID and SV_CLOUDRU_KEY_SECRET must be provided together"
+        )
+    try:
+        cloudru_credentials = (
+            CloudRuCredentials(cloudru_key_id, cloudru_key_secret)
+            if cloudru_key_id is not None and cloudru_key_secret is not None
+            else None
+        )
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from None
     llm_values = (llm_url, llm_model, llm_key)
     if any(llm_values) and not all(llm_values):
         raise click.UsageError(
@@ -346,6 +367,7 @@ def main(
             source,
             timeout=clone_timeout,
             max_clone_bytes=max_clone_mib * 1024 * 1024,
+            cloudru_credentials=cloudru_credentials,
         ) as repo_path:
             try:
                 report = pipeline.run(

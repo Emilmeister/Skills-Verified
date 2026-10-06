@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from skills_verified.repo.cloudru_auth import CloudRuCredentials, get_access_token
+
 
 _SCP_GIT_URL = re.compile(r"^(?P<user>[A-Za-z0-9_.-]+)@(?P<host>[^:/]+):(?P<path>.+)$")
 _DNS_NAME = re.compile(
@@ -244,6 +246,7 @@ def _run_clone(
     timeout: float,
     max_clone_bytes: int,
 ) -> None:
+    deadline = time.monotonic() + timeout
     try:
         process = subprocess.Popen(
             command,
@@ -266,7 +269,6 @@ def _run_clone(
 
     completed = False
     try:
-        deadline = time.monotonic() + timeout
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -306,6 +308,7 @@ def fetch_repo(
     allow_private_hosts: bool = False,
     allowed_hosts: Collection[str] | None = None,
     max_clone_bytes: int = DEFAULT_MAX_CLONE_BYTES,
+    cloudru_credentials: CloudRuCredentials | None = None,
 ) -> Path:
     """Return a local repository directory, cloning a safe remote URL when needed.
 
@@ -337,6 +340,19 @@ def fetch_repo(
         raise RepoFetchError(
             f"Repository acquisition timed out after {timeout:g} seconds"
         )
+    token = None
+    if (
+        cloudru_credentials is not None
+        and urlsplit(source).scheme == "https"
+        and remote_host.lower() == "repo.cloud.ru"
+        and remote_port == 443
+    ):
+        token = get_access_token(cloudru_credentials, timeout=clone_timeout)
+        clone_timeout = deadline - time.monotonic()
+        if clone_timeout <= 0:
+            raise RepoFetchError(
+                f"Repository acquisition timed out after {timeout:g} seconds"
+            )
     owns_target = clone_dir is None
     target = Path(clone_dir) if clone_dir else Path(tempfile.mkdtemp(prefix="sv-"))
     environment = {
@@ -354,6 +370,15 @@ def fetch_repo(
             "GCM_INTERACTIVE": "never",
         }
     )
+    if token is not None:
+        # Runtime Git config keeps the token out of argv and .git/config.
+        environment.update(
+            {
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "http.https://repo.cloud.ru/.extraHeader",
+                "GIT_CONFIG_VALUE_0": f"Authorization: Bearer {token}",
+            }
+        )
     if allow_ssh:
         for key in ("HOME", "SSH_AUTH_SOCK"):
             if key in os.environ:

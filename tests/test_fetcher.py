@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -106,6 +107,190 @@ def test_fetch_remote_uses_noninteractive_timed_clone(monkeypatch, tmp_path):
     assert args[2] == target
     assert 0 < kwargs["timeout"] <= 7
     assert kwargs["max_clone_bytes"] == DEFAULT_MAX_CLONE_BYTES
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "https://repo.cloud.ru/project/skills.git",
+        "https://REPO.CLOUD.RU:443/project/skills.git",
+    ],
+)
+def test_cloudru_clone_scopes_bearer_header_without_persisting_secrets(
+    monkeypatch, tmp_path, source
+):
+    _stub_dns(monkeypatch)
+    credentials = SimpleNamespace(key_id="test-key-id", key_secret="test-key-secret")
+    token = "test.jwt.token"
+    get_token = Mock(return_value=token)
+    monkeypatch.setattr(fetcher_module, "get_access_token", get_token, raising=False)
+    run_clone = Mock()
+    monkeypatch.setattr(fetcher_module, "_run_clone", run_clone)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Bearer inherited-secret")
+    monkeypatch.setenv("SV_CLOUDRU_KEY_ID", credentials.key_id)
+    monkeypatch.setenv("SV_CLOUDRU_KEY_SECRET", credentials.key_secret)
+    target = tmp_path / "clone"
+
+    fetch_repo(source, str(target), cloudru_credentials=credentials, timeout=7)
+
+    assert get_token.call_args.args == (credentials,)
+    assert 0 < get_token.call_args.kwargs["timeout"] <= 7
+    command, environment, _ = run_clone.call_args.args
+    assert environment["GIT_CONFIG_COUNT"] == "1"
+    assert environment["GIT_CONFIG_KEY_0"] == "http.https://repo.cloud.ru/.extraHeader"
+    assert environment["GIT_CONFIG_VALUE_0"] == f"Authorization: Bearer {token}"
+    for secret in (
+        credentials.key_id,
+        credentials.key_secret,
+        token,
+        "inherited-secret",
+    ):
+        assert secret not in " ".join(command)
+    assert credentials.key_id not in environment.values()
+    assert credentials.key_secret not in environment.values()
+    assert "inherited-secret" not in environment.values()
+    assert not target.exists()
+    assert all(value != token for value in os.environ.values())
+
+    # Ask Git itself which URLs receive the runtime header, without a network call.
+    for url, expected in (
+        (source, f"Authorization: Bearer {token}"),
+        ("https://example.test/repo.git", ""),
+        ("http://repo.cloud.ru/project/skills.git", ""),
+        ("https://repo.cloud.ru:8443/project/skills.git", ""),
+    ):
+        result = subprocess.run(
+            ["git", "config", "--get-urlmatch", "http.extraHeader", url],
+            env=environment,
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert result.stdout.strip() == expected
+        assert result.returncode == (0 if expected else 1)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "https://example.test/project/repo.git",
+        "https://repo.cloud.ru.evil.test/project/repo.git",
+        "https://repo.cloud.ru:8443/project/repo.git",
+        "ssh://git@repo.cloud.ru/project/repo.git",
+    ],
+)
+def test_cloudru_credentials_are_not_used_for_other_origins(
+    monkeypatch, tmp_path, source
+):
+    _stub_dns(monkeypatch)
+    get_token = Mock()
+    monkeypatch.setattr(fetcher_module, "get_access_token", get_token, raising=False)
+    run_clone = Mock()
+    monkeypatch.setattr(fetcher_module, "_run_clone", run_clone)
+
+    fetch_repo(
+        source,
+        str(tmp_path / "clone"),
+        cloudru_credentials=SimpleNamespace(key_id="id", key_secret="secret"),
+        allow_ssh=source.startswith("ssh:"),
+    )
+
+    get_token.assert_not_called()
+    assert "GIT_CONFIG_COUNT" not in run_clone.call_args.args[1]
+
+
+def test_cloudru_credentials_do_not_authenticate_local_paths(monkeypatch, tmp_path):
+    get_token = Mock()
+    monkeypatch.setattr(fetcher_module, "get_access_token", get_token, raising=False)
+
+    assert fetch_repo(str(tmp_path), cloudru_credentials=object()) == tmp_path
+    get_token.assert_not_called()
+
+
+def test_cloudru_authentication_uses_remaining_acquisition_budget(
+    monkeypatch, tmp_path
+):
+    _stub_dns(monkeypatch)
+    get_token = Mock(return_value="test.jwt.token")
+    monkeypatch.setattr(fetcher_module, "get_access_token", get_token, raising=False)
+    run_clone = Mock()
+    monkeypatch.setattr(fetcher_module, "_run_clone", run_clone)
+    clock = iter((10.0, 12.0, 15.0))
+    monkeypatch.setattr(fetcher_module.time, "monotonic", lambda: next(clock))
+
+    fetch_repo(
+        "https://repo.cloud.ru/project/skills.git",
+        str(tmp_path / "clone"),
+        cloudru_credentials=object(),
+        timeout=7,
+    )
+
+    assert get_token.call_args.kwargs["timeout"] == 5
+    assert run_clone.call_args.kwargs["timeout"] == 2
+
+
+def test_cloudru_auth_timeout_does_not_create_clone_directory(monkeypatch):
+    _stub_dns(monkeypatch)
+    monkeypatch.setattr(
+        fetcher_module,
+        "get_access_token",
+        Mock(return_value="test.jwt.token"),
+        raising=False,
+    )
+    create_target = Mock()
+    run_clone = Mock()
+    monkeypatch.setattr(fetcher_module.tempfile, "mkdtemp", create_target)
+    monkeypatch.setattr(fetcher_module, "_run_clone", run_clone)
+    clock = iter((10.0, 12.0, 18.0))
+    monkeypatch.setattr(fetcher_module.time, "monotonic", lambda: next(clock))
+
+    with pytest.raises(RepoFetchError, match="acquisition timed out"):
+        fetch_repo(
+            "https://repo.cloud.ru/project/skills.git",
+            cloudru_credentials=object(),
+            timeout=7,
+        )
+
+    create_target.assert_not_called()
+    run_clone.assert_not_called()
+
+
+def test_cloudru_dns_guard_runs_before_authentication(monkeypatch):
+    _stub_dns(monkeypatch, "192.168.1.2")
+    get_token = Mock()
+    monkeypatch.setattr(fetcher_module, "get_access_token", get_token, raising=False)
+
+    with pytest.raises(ValueError, match="non-public"):
+        fetch_repo(
+            "https://repo.cloud.ru/project/skills.git", cloudru_credentials=object()
+        )
+
+    get_token.assert_not_called()
+
+
+def test_run_clone_timeout_includes_process_startup(monkeypatch, tmp_path):
+    now = [10.0]
+    process = Mock()
+    process.wait.return_value = 0
+
+    def start(*_args, **_kwargs):
+        now[0] += 10
+        return process
+
+    monkeypatch.setattr(fetcher_module.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(fetcher_module.subprocess, "Popen", start)
+    terminate = Mock()
+    monkeypatch.setattr(fetcher_module, "_terminate_process", terminate)
+
+    with pytest.raises(RepoFetchError, match="timed out"):
+        _run_clone(
+            ["git", "clone"], {}, tmp_path, timeout=5, max_clone_bytes=1024 * 1024
+        )
+
+    terminate.assert_called_once_with(process)
 
 
 def test_fetch_rejects_ssh_without_explicit_opt_in():

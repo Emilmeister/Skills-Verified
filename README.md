@@ -111,6 +111,29 @@ skills-verified https://github.com/example/skill.git \
 HTTP, URL со встроенными credentials, private/reserved IP и SSH через публичный
 CLI отклоняются. SSH доступен только программным вызовом
 `fetch_repo(..., allow_ssh=True)`.
+
+Для закрытого репозитория Cloud.ru Repo задайте персональные **Key ID** и
+**Key Secret** через переменные окружения или секреты CI:
+
+```bash
+export SV_CLOUDRU_KEY_ID='replace-with-key-id'
+export SV_CLOUDRU_KEY_SECRET='replace-with-key-secret'
+skills-verified https://repo.cloud.ru/<project-id>/<repository-name>.git \
+  --skip llm \
+  > report.json
+```
+
+Обе переменные обязательны вместе. CLI получает JWT через
+[IAM API](https://cloud.ru/docs/console_api/ug/topics/guides__auth_api) и передаёт
+его Git только для `https://repo.cloud.ru` на стандартном порту 443.
+`repo-auth-helper` и настройка глобального Git config не требуются. На каждый
+clone запрашивается свежий токен; ключи и JWT не сохраняются на диск и не
+попадают в аргументы Git или отчёт. CLI удаляет эти две переменные из собственного
+окружения перед запуском анализаторов; окружение родительского shell не меняется.
+Локальные каталоги и другие Git-хосты сканируются без использования этих ключей.
+Ошибки IAM приводят к JSON-отчёту `failed` с диагностикой `source_fetch_failed`
+и exit code `2`. Запрос к IAM входит в общий `--clone-timeout`.
+
 Для крупных доверенно выбранных репозиториев лимит shallow clone можно поднять,
 не отключая остальные проверки: `--max-clone-mib 512` или
 `SV_MAX_CLONE_MIB=512` (допустимо `1..4096`).
@@ -387,6 +410,9 @@ jq '{
 
 Потребитель обязан учитывать `scan.status`, `scope`, `analyzer_runs` и
 `diagnostics`; отсутствие findings само по себе не означает безопасный skill.
+
+Разбор всех кодов `diagnostics`, статусов и примеры JSON для сбойных прогонов —
+в [docs/errors.md](docs/errors.md).
 
 ## Docker
 
